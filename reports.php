@@ -2,143 +2,300 @@
 require_once 'config.php';
 require_once 'JalaliDate.php';
 
-if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true){ header("location: login.php"); exit; }
-
-$viewing_user_id = $_SESSION['id'];
-if (isset($_GET['user_id']) && isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
-    $viewing_user_id = (int)$_GET['user_id'];
+// --- Authentication & Authorization ---
+if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
+    header("location: login.php");
+    exit;
+}
+if ($_SESSION["role"] !== 'admin') {
+    die("شما دسترسی لازم برای مشاهده این صفحه را ندارید.");
 }
 
-// --- Fetch user info ---
-$viewed_user_info = null;
+// --- Fetch all users for dropdown ---
+$all_users = [];
 try {
-    $stmt_user = $pdo->prepare("SELECT username, daily_hours_goal, annual_leave_days FROM users WHERE id = :user_id");
-    $stmt_user->execute([':user_id' => $viewing_user_id]);
-    $viewed_user_info = $stmt_user->fetch(PDO::FETCH_ASSOC);
-} catch (PDOException $e) { die("Error fetching user data."); }
+    $user_stmt = $pdo->query("SELECT id, full_name FROM users ORDER BY full_name ASC");
+    $all_users = $user_stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    die("Error fetching users: " . $e->getMessage());
+}
 
-if (!$viewed_user_info) die("User not found.");
-$user_work_hours_goal = (float)$viewed_user_info['daily_hours_goal'];
-$annual_leave_total = (int)$viewed_user_info['annual_leave_days'];
-$standard_work_seconds = $user_work_hours_goal * 3600;
-$grand_total_deficit_seconds = 0; // Initialize here to guarantee it exists
 
-// --- Fetch Leave Data ---
-$leave_taken_count = 0;
-try {
-    $stmt_leave = $pdo->prepare("SELECT COUNT(id) as leave_count FROM leave_logs WHERE user_id = :user_id");
-    $stmt_leave->execute([':user_id' => $viewing_user_id]);
-    $leave_result = $stmt_leave->fetch(PDO::FETCH_ASSOC);
-    $leave_taken_count = (int)$leave_result['leave_count'];
-} catch (PDOException $e) { /* Silently fail */ }
-$leave_remaining = $annual_leave_total - $leave_taken_count;
+// --- Date & User Selection ---
+$current_jalali_date = JalaliDate::toJalali(date('Y-m-d'));
+list($current_year, $current_month, $current_day) = explode('/', $current_jalali_date);
 
-// --- Fetch Logs (Work and Leave) ---
-$all_events = [];
-try {
-    // Fetch Time Logs
-    $stmt_logs = $pdo->prepare("SELECT log_date, start_time, end_time, log_type FROM time_logs WHERE user_id = :user_id");
-    $stmt_logs->execute([':user_id' => $viewing_user_id]);
-    $time_logs = $stmt_logs->fetchAll(PDO::FETCH_ASSOC);
+$selected_user_id = $_GET['user_id'] ?? null;
+$selected_year = $_GET['year'] ?? $current_year;
+$selected_month = $_GET['month'] ?? $current_month;
 
-    $daily_reports = [];
-    foreach ($time_logs as $log) {
-        $date = $log['log_date'];
-        if (!isset($daily_reports[$date])) $daily_reports[$date] = ['intervals' => [], 'total_seconds' => 0];
-        $start_ts = strtotime($log['start_time']);
-        $end_ts = strtotime($log['end_time']);
-        if ($end_ts > $start_ts) {
-            $diff = $end_ts - $start_ts;
-            $daily_reports[$date]['total_seconds'] += ($log['log_type'] === 'work' ? $diff : -$diff);
-            if ($log['log_type'] === 'work') $daily_reports[$date]['intervals'][] = ['start' => date('H:i', $start_ts), 'end' => date('H:i', $end_ts)];
+// --- Data Fetching ---
+$logs_by_day = [];
+$monthly_total_hours = 0;
+$monthly_total_break_minutes = 0;
+$all_logs = [];
+$summary_data = [];
+
+// Only fetch data if a user is selected
+if ($selected_user_id) {
+    // Fetch user data for calculations
+    $user_sql = "SELECT daily_hours_goal, annual_leave_days FROM users WHERE id = :id";
+    $user_stmt = $pdo->prepare($user_sql);
+    $user_stmt->execute(['id' => $selected_user_id]);
+    $user_data = $user_stmt->fetch(PDO::FETCH_ASSOC);
+
+    // Fetch leave count for the whole year
+    $leave_sql = "SELECT COUNT(*) FROM leave_logs WHERE user_id = :user_id";
+    $leave_stmt = $pdo->prepare($leave_sql);
+    $leave_stmt->execute(['user_id' => $selected_user_id]);
+    $total_leave_days = $leave_stmt->fetchColumn();
+    try {
+        // Fetch all logs for the selected user, year, and month
+        $sql = "SELECT * FROM time_logs WHERE user_id = :user_id AND jalali_year = :year AND jalali_month = :month ORDER BY log_date ASC, start_time ASC";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(['user_id' => $selected_user_id, 'year' => $selected_year, 'month' => $selected_month]);
+        $all_logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Group logs by day and calculate totals
+        foreach ($all_logs as $log) {
+            $day = $log['jalali_day'];
+            if (!isset($logs_by_day[$day])) {
+                $logs_by_day[$day] = ['work_hours' => 0, 'break_minutes' => 0, 'entries' => []];
+            }
+
+            $start = new DateTime($log['start_time']);
+            $end = new DateTime($log['end_time']);
+            $diff_seconds = $end->getTimestamp() - $start->getTimestamp();
+
+            if ($log['log_type'] === 'work') {
+                $work_hours = $diff_seconds / 3600;
+                $logs_by_day[$day]['work_hours'] += $work_hours;
+                $monthly_total_hours += $work_hours;
+                $logs_by_day[$day]['entries'][] = date('H:i', $start->getTimestamp()) . ' - ' . date('H:i', $end->getTimestamp());
+            } else {
+                $break_minutes = $diff_seconds / 60;
+                $logs_by_day[$day]['break_minutes'] += $break_minutes;
+                $monthly_total_break_minutes += $break_minutes;
+            }
         }
-    }
-    foreach($daily_reports as $date => $report){
-        $all_events[$date] = ['type' => 'work_day', 'data' => $report];
-    }
+        ksort($logs_by_day);
 
-    // Fetch Leave Logs
-    $stmt_leave = $pdo->prepare("SELECT leave_date, reason FROM leave_logs WHERE user_id = :user_id");
-    $stmt_leave->execute([':user_id' => $viewing_user_id]);
-    $leave_logs = $stmt_leave->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($leave_logs as $leave) {
-        $all_events[$leave['leave_date']] = ['type' => 'leave_day', 'data' => ['reason' => $leave['reason']]];
-    }
+        // --- Summary Calculations ---
+        $days_worked = count($logs_by_day);
+        $total_hours_goal = $days_worked * ($user_data['daily_hours_goal'] ?? 8);
+        $overtime_undertim_hours = $monthly_total_hours - $total_hours_goal;
+        $remaining_leave = ($user_data['annual_leave_days'] ?? 26) - $total_leave_days;
 
-    // Sort all events by date descending
-    krsort($all_events);
+        $summary_data = [
+            'overtime_undertim' => round($overtime_undertim_hours, 2),
+            'remaining_leave' => $remaining_leave
+        ];
 
-} catch (PDOException $e) { die('<div class="alert alert-danger">خطا در دریافت اطلاعات.</div>'); }
-
-foreach ($all_events as $event) {
-    if ($event['type'] === 'work_day') {
-        $grand_total_deficit_seconds += ($event['data']['total_seconds'] - $standard_work_seconds);
+    } catch (Exception $e) {
+        die("Error fetching report data: " . $e->getMessage());
     }
 }
 
-function format_seconds_to_hours($seconds) {
-    $sign = $seconds < 0 ? '-' : '';
-    $seconds = abs($seconds);
-    $h = floor($seconds / 3600);
-    $m = floor(($seconds % 3600) / 60);
-    return sprintf("%s%02d:%02d", $sign, $h, $m);
+
+// --- Prepare Chart Data ---
+$chart_labels = [];
+$chart_data = [];
+foreach ($logs_by_day as $day => $data) {
+    $chart_labels[] = $day;
+    $chart_data[] = round($data['work_hours'], 2);
 }
+
+// --- Fetch available years for the dropdown ---
+$available_years = [];
+try {
+    $years_sql = "SELECT DISTINCT jalali_year FROM time_logs WHERE jalali_year IS NOT NULL ORDER BY jalali_year DESC";
+    $years_stmt = $pdo->query($years_sql);
+    $available_years = $years_stmt->fetchAll(PDO::FETCH_COLUMN);
+} catch (Exception $e) {
+    //
+}
+
+
+$jalali_months = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
 ?>
+
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>گزارش جامع برای <?php echo htmlspecialchars($viewed_user_info['username']); ?></title>
+    <title>گزارشات کاربران</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-<div class="container my-4">
-    <?php require_once 'nav.php'; ?>
+    <div class="container my-5">
+        <?php if(file_exists('nav.php')) { require_once 'nav.php'; } ?>
 
-    <h2 class="mb-4">گزارش جامع برای: <span class="text-primary"><?php echo htmlspecialchars($viewed_user_info['username']); ?></span></h2>
-    <!-- Summary Cards -->
-    <div class="row g-3 text-center mb-4">
-        <div class="col-md"><div class="card"><div class="card-header fw-bold">وضعیت کلی کارکرد</div><div class="card-body">مجموع اضافه/کسری کار:<strong class="d-block fs-4 <?php echo ($grand_total_deficit_seconds < 0 ? 'text-danger' : 'text-success'); ?>"><?php echo format_seconds_to_hours($grand_total_deficit_seconds); ?></strong></div></div></div>
-        <div class="col-md"><div class="card"><div class="card-header fw-bold">وضعیت مرخصی</div><div class="card-body"><span class="badge bg-secondary">کل: <?php echo $annual_leave_total; ?></span> <span class="badge bg-warning text-dark">مصرف شده: <?php echo $leave_taken_count; ?></span> <span class="badge bg-success">باقیمانده: <?php echo $leave_remaining; ?></span></div></div></div>
-    </div>
+        <h3 class="mb-4">گزارش ماهانه کاربران</h3>
 
-    <div class="card">
-        <div class="card-header">گزارش روزانه</div>
-        <div class="card-body p-2 p-md-3">
-            <div class="table-responsive">
-                <table class="table table-striped table-hover text-center small">
-                    <thead class="table-dark"><tr><th>تاریخ</th><th>نوع</th><th>جزئیات</th></tr></thead>
-                    <tbody>
-                        <?php if (empty($all_events)): ?>
-                            <tr><td colspan="3" class="text-center p-4">هیچ گزارشی برای این کاربر ثبت نشده است.</td></tr>
-                        <?php else: foreach ($all_events as $date => $event): ?>
-                            <tr>
-                                <td class="align-middle"><a href="index.php?date=<?php echo JalaliDate::toJalali($date); ?>"><?php echo JalaliDate::toJalali($date); ?></a></td>
-                                <?php if ($event['type'] === 'work_day'):
-                                    $report = $event['data'];
-                                    $deficit = $report['total_seconds'] - $standard_work_seconds;
-                                ?>
-                                    <td class="align-middle"><span class="badge bg-primary">کاری</span></td>
-                                    <td>
-                                        <div><strong>ساعات مفید:</strong> <span class="fw-bold"><?php echo format_seconds_to_hours($report['total_seconds']); ?></span></div>
-                                        <div><strong>کسری/اضافه:</strong> <span class="fw-bold <?php echo $deficit < 0 ? 'text-danger' : 'text-success'; ?>"><?php echo format_seconds_to_hours($deficit); ?></span></div>
-                                        <hr class="my-1">
-                                        <?php foreach ($report['intervals'] as $interval) { echo "<div>{$interval['start']} - {$interval['end']}</div>"; } ?>
-                                    </td>
-                                <?php else: // leave_day ?>
-                                    <td class="align-middle"><span class="badge bg-info">مرخصی</span></td>
-                                    <td><?php echo htmlspecialchars($event['data']['reason']); ?></td>
-                                <?php endif; ?>
-                            </tr>
-                        <?php endforeach; endif; ?>
-                    </tbody>
-                </table>
+        <!-- Filter Form -->
+        <form action="reports.php" method="get" class="row g-3 mb-4 p-3 border rounded bg-light">
+            <div class="col-md-4">
+                <label for="user_id" class="form-label">کاربر</label>
+                <select name="user_id" id="user_id" class="form-select">
+                    <option value="">انتخاب کنید</option>
+                    <?php foreach ($all_users as $user): ?>
+                        <option value="<?php echo $user['id']; ?>" <?php if ($user['id'] == $selected_user_id) echo 'selected'; ?>>
+                            <?php echo htmlspecialchars($user['full_name']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
-        </div>
+            <div class="col-md-3">
+                <label for="year" class="form-label">سال</label>
+                <select name="year" id="year" class="form-select">
+                    <?php foreach ($available_years as $year): ?>
+                        <option value="<?php echo $year; ?>" <?php if ($year == $selected_year) echo 'selected'; ?>>
+                            <?php echo $year; ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="month" class="form-label">ماه</label>
+                <select name="month" id="month" class="form-select">
+                    <?php for ($m = 1; $m <= 12; $m++): ?>
+                        <option value="<?php echo $m; ?>" <?php if ($m == $selected_month) echo 'selected'; ?>>
+                            <?php echo $jalali_months[$m-1]; ?>
+                        </option>
+                    <?php endfor; ?>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">نمایش</button>
+            </div>
+        </form>
+
+        <?php if (!$selected_user_id): ?>
+            <div class="alert alert-info">لطفا برای مشاهده گزارش، یک کاربر را انتخاب کنید.</div>
+        <?php elseif (empty($all_logs)): ?>
+            <div class="alert alert-info">هیچ گزارشی برای کاربر و ماه انتخاب شده ثبت نشده است.</div>
+        <?php else: ?>
+            <!-- Summary Cards -->
+            <div class="row text-center mb-4">
+                <div class="col-md-6">
+                    <div class="card text-white <?php echo $summary_data['overtime_undertim'] >= 0 ? 'bg-success' : 'bg-danger'; ?>">
+                        <div class="card-body">
+                            <h6 class="card-title">وضعیت اضافه/کسر کار (ساعت)</h6>
+                            <p class="fs-4 fw-bold"><?php echo $summary_data['overtime_undertim']; ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">مرخصی باقی‌مانده (روز)</h6>
+                            <p class="fs-4 fw-bold"><?php echo $summary_data['remaining_leave']; ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row text-center mb-4">
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">مجموع ساعات کاری</h6>
+                            <p class="fs-4 fw-bold"><?php echo round($monthly_total_hours, 2); ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">میانگین روزانه</h6>
+                            <p class="fs-4 fw-bold"><?php echo (count($logs_by_day) > 0 && $monthly_total_hours > 0) ? round($monthly_total_hours / count($logs_by_day), 2) : 0; ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">مجموع استراحت (دقیقه)</h6>
+                            <p class="fs-4 fw-bold"><?php echo round($monthly_total_break_minutes); ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    نمودار ساعات کاری روزانه
+                </div>
+                <div class="card-body">
+                    <canvas id="workHoursChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Accordion for Daily Details -->
+            <div class="accordion" id="reports-accordion">
+                <?php foreach ($logs_by_day as $day => $data): ?>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<?php echo $day; ?>">
+                                <div class="w-100 d-flex justify-content-between pe-3">
+                                    <strong><?php echo "{$selected_year}/{$selected_month}/{$day}"; ?></strong>
+                                    <span>مجموع ساعت کاری: <?php echo round($data['work_hours'], 2); ?></span>
+                                    <span>استراحت: <?php echo round($data['break_minutes']); ?> دقیقه</span>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="collapse-<?php echo $day; ?>" class="accordion-collapse collapse" data-bs-parent="#reports-accordion">
+                            <div class="accordion-body">
+                                <h6>بازه های زمانی حضور:</h6>
+                                <ul>
+                                    <?php foreach($data['entries'] as $entry): ?>
+                                        <li><?php echo $entry; ?></li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
     </div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        const ctx = document.getElementById('workHoursChart');
+        if (ctx) {
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: <?php echo json_encode($chart_labels); ?>,
+                    datasets: [{
+                        label: 'ساعات کاری',
+                        data: <?php echo json_encode($chart_data); ?>,
+                        backgroundColor: 'rgba(0, 46, 54, 0.8)',
+                        borderColor: 'rgba(0, 46, 54, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'ساعت' }
+                        },
+                        x: {
+                            title: { display: true, text: 'روز ماه' }
+                        }
+                    },
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

@@ -40,6 +40,9 @@ if (!$gregorian_date_obj) {
 }
 $log_date_gregorian = $gregorian_date_obj->format('Y-m-d');
 
+// Extract Jalali parts for insertion
+list($jalali_year, $jalali_month, $jalali_day) = explode('/', $log_date_jalali);
+
 try {
     $pdo->beginTransaction();
 
@@ -72,13 +75,16 @@ try {
             $stmt->execute(['time' => $end_time, 'id' => $existing_partial['id']]);
             $new_log_id = $existing_partial['id'];
         } else {
-            $sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type) VALUES (:user_id, :log_date, :start_time, :end_time, 'work')";
+            $sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 'user_id' => $user_id,
                 'log_date' => $log_date_gregorian,
                 'start_time' => $start_time,
-                'end_time' => $end_time
+                'end_time' => $end_time,
+                'jalali_year' => $jalali_year,
+                'jalali_month' => $jalali_month,
+                'jalali_day' => $jalali_day
             ]);
             $new_log_id = $pdo->lastInsertId();
         }

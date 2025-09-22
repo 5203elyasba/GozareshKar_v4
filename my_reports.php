@@ -2,40 +2,38 @@
 require_once 'config.php';
 require_once 'JalaliDate.php';
 
-// Authentication
+// --- Authentication ---
 if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
     header("location: login.php");
     exit;
 }
 
 $user_id = $_SESSION['id'];
-$user_full_name = $_SESSION['full_name'] ?? 'کاربر';
-$logs_by_date = [];
 
-$selected_year = $_GET['year'] ?? null;
-$selected_month = $_GET['month'] ?? null;
+// --- Date Selection ---
+$current_jalali_date = JalaliDate::toJalali(date('Y-m-d'));
+list($current_year, $current_month, $current_day) = explode('/', $current_jalali_date);
+
+$selected_year = $_GET['year'] ?? $current_year;
+$selected_month = $_GET['month'] ?? $current_month;
+
+// --- Data Fetching ---
+$logs_by_day = [];
+$monthly_total_hours = 0;
+$monthly_total_break_minutes = 0;
 
 try {
-    // Fetch distinct years with logs for this user
-    $years_stmt = $pdo->prepare("SELECT DISTINCT YEAR(log_date) as log_year FROM time_logs WHERE user_id = :user_id ORDER BY log_year DESC");
-    $years_stmt->execute(['user_id' => $user_id]);
-    $available_years = $years_stmt->fetchAll(PDO::FETCH_COLUMN);
+    // Fetch all logs for the selected user, year, and month
+    $sql = "SELECT * FROM time_logs WHERE user_id = :user_id AND jalali_year = :year AND jalali_month = :month ORDER BY log_date ASC, start_time ASC";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute(['user_id' => $user_id, 'year' => $selected_year, 'month' => $selected_month]);
+    $all_logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // If a year and month are selected, fetch the logs for that period
-    if ($selected_year && $selected_month) {
-        $logs_sql = "SELECT log_date, start_time, end_time, log_type FROM time_logs WHERE user_id = :user_id AND YEAR(log_date) = :year AND MONTH(log_date) = :month ORDER BY log_date ASC, start_time ASC";
-        $logs_stmt = $pdo->prepare($logs_sql);
-        $logs_stmt->execute(['user_id' => $user_id, 'year' => $selected_year, 'month' => $selected_month]);
-        $all_logs = $logs_stmt->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        $all_logs = []; // Don't show any logs if no period is selected
-    }
-
-    // Group logs by date
+    // Group logs by day and calculate totals
     foreach ($all_logs as $log) {
-        $jalali_date = JalaliDate::toJalali($log['log_date']);
-        if (!isset($logs_by_date[$jalali_date])) {
-            $logs_by_date[$jalali_date] = ['work_hours' => 0, 'break_minutes' => 0, 'entries' => []];
+        $day = $log['jalali_day'];
+        if (!isset($logs_by_day[$day])) {
+            $logs_by_day[$day] = ['work_hours' => 0, 'break_minutes' => 0, 'entries' => []];
         }
 
         $start = new DateTime($log['start_time']);
@@ -43,16 +41,41 @@ try {
         $diff_seconds = $end->getTimestamp() - $start->getTimestamp();
 
         if ($log['log_type'] === 'work') {
-            $logs_by_date[$jalali_date]['work_hours'] += $diff_seconds / 3600;
-            $logs_by_date[$jalali_date]['entries'][] = date('H:i', $start->getTimestamp()) . ' - ' . date('H:i', $end->getTimestamp());
+            $work_hours = $diff_seconds / 3600;
+            $logs_by_day[$day]['work_hours'] += $work_hours;
+            $monthly_total_hours += $work_hours;
+            $logs_by_day[$day]['entries'][] = date('H:i', $start->getTimestamp()) . ' - ' . date('H:i', $end->getTimestamp());
         } else {
-            $logs_by_date[$jalali_date]['break_minutes'] += $diff_seconds / 60;
+            $break_minutes = $diff_seconds / 60;
+            $logs_by_day[$day]['break_minutes'] += $break_minutes;
+            $monthly_total_break_minutes += $break_minutes;
         }
     }
+    ksort($logs_by_day); // Sort days in ascending order
 
-} catch (PDOException $e) {
-    die("Database Error: " . $e->getMessage());
+} catch (Exception $e) {
+    die("Error fetching report data: " . $e->getMessage());
 }
+
+// --- Prepare Chart Data ---
+$chart_labels = [];
+$chart_data = [];
+foreach ($logs_by_day as $day => $data) {
+    $chart_labels[] = $day;
+    $chart_data[] = round($data['work_hours'], 2);
+}
+
+// --- Fetch available years for the dropdown ---
+$available_years = [];
+try {
+    $years_stmt = $pdo->prepare("SELECT DISTINCT jalali_year FROM time_logs WHERE user_id = :user_id ORDER BY jalali_year DESC");
+    $years_stmt->execute(['user_id' => $user_id]);
+    $available_years = $years_stmt->fetchAll(PDO::FETCH_COLUMN);
+} catch (Exception $e) {
+    //
+}
+
+$jalali_months = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
 ?>
 
 <!DOCTYPE html>
@@ -60,58 +83,99 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>گزارشات دقیق شما</title>
+    <title>گزارشات من</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container my-5">
         <?php if(file_exists('nav.php')) { require_once 'nav.php'; } ?>
 
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3 class="mb-0">گزارشات دقیق روزانه شما</h3>
-            <div class="col-md-4">
-                <form action="my_reports.php" method="get" id="year-select-form">
-                    <select name="year" class="form-select" onchange="this.form.submit()">
-                        <option value="">انتخاب سال</option>
-                        <?php foreach ($available_years as $year): ?>
-                            <option value="<?php echo $year; ?>" <?php if ($year == $selected_year) echo 'selected'; ?>>
-                                سال <?php echo $year; ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </form>
-            </div>
-        </div>
+        <h3 class="mb-4">گزارش ماهانه شما</h3>
 
-        <?php if ($selected_year): ?>
-            <div class="list-group list-group-horizontal-md mb-4">
-                <?php for ($m = 1; $m <= 12; $m++): ?>
-                    <a href="my_reports.php?year=<?php echo $selected_year; ?>&month=<?php echo $m; ?>"
-                       class="list-group-item list-group-item-action <?php if ($m == $selected_month) echo 'active'; ?>">
-                       <?php echo ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"][$m-1]; ?>
-                    </a>
-                <?php endfor; ?>
+        <!-- Filter Form -->
+        <form action="my_reports.php" method="get" class="row g-3 mb-4 p-3 border rounded bg-light">
+            <div class="col-md-5">
+                <label for="year" class="form-label">سال</label>
+                <select name="year" id="year" class="form-select">
+                    <?php foreach ($available_years as $year): ?>
+                        <option value="<?php echo $year; ?>" <?php if ($year == $selected_year) echo 'selected'; ?>>
+                            <?php echo $year; ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
-        <?php endif; ?>
+            <div class="col-md-5">
+                <label for="month" class="form-label">ماه</label>
+                <select name="month" id="month" class="form-select">
+                    <?php for ($m = 1; $m <= 12; $m++): ?>
+                        <option value="<?php echo $m; ?>" <?php if ($m == $selected_month) echo 'selected'; ?>>
+                            <?php echo $jalali_months[$m-1]; ?>
+                        </option>
+                    <?php endfor; ?>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">نمایش</button>
+            </div>
+        </form>
 
-        <?php if ($selected_year && $selected_month): ?>
-            <?php if (empty($all_logs)): ?>
-                <div class="alert alert-info">هیچ گزارشی برای این ماه ثبت نشده است.</div>
-            <?php else: ?>
-                <div class="accordion" id="reports-accordion">
-                    <?php foreach ($logs_by_date as $date => $data): ?>
-                        <div class="accordion-item">
-                        <h2 class="accordion-header" id="heading-<?php echo str_replace('/', '-', $date); ?>">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<?php echo str_replace('/', '-', $date); ?>" aria-expanded="false">
+        <?php if (empty($all_logs)): ?>
+            <div class="alert alert-info">هیچ گزارشی برای این ماه ثبت نشده است.</div>
+        <?php else: ?>
+            <!-- Summary Cards -->
+            <div class="row text-center mb-4">
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">مجموع ساعات کاری</h6>
+                            <p class="fs-4 fw-bold"><?php echo round($monthly_total_hours, 2); ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">میانگین روزانه</h6>
+                            <p class="fs-4 fw-bold"><?php echo (count($logs_by_day) > 0 && $monthly_total_hours > 0) ? round($monthly_total_hours / count($logs_by_day), 2) : 0; ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">مجموع استراحت (دقیقه)</h6>
+                            <p class="fs-4 fw-bold"><?php echo round($monthly_total_break_minutes); ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    نمودار ساعات کاری روزانه
+                </div>
+                <div class="card-body">
+                    <canvas id="workHoursChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Accordion for Daily Details -->
+            <div class="accordion" id="reports-accordion">
+                <?php foreach ($logs_by_day as $day => $data): ?>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<?php echo $day; ?>">
                                 <div class="w-100 d-flex justify-content-between pe-3">
-                                    <strong><?php echo $date; ?></strong>
+                                    <strong><?php echo "{$selected_year}/{$selected_month}/{$day}"; ?></strong>
                                     <span>مجموع ساعت کاری: <?php echo round($data['work_hours'], 2); ?></span>
                                     <span>استراحت: <?php echo round($data['break_minutes']); ?> دقیقه</span>
                                 </div>
                             </button>
                         </h2>
-                        <div id="collapse-<?php echo str_replace('/', '-', $date); ?>" class="accordion-collapse collapse" data-bs-parent="#reports-accordion">
+                        <div id="collapse-<?php echo $day; ?>" class="accordion-collapse collapse" data-bs-parent="#reports-accordion">
                             <div class="accordion-body">
                                 <h6>بازه های زمانی حضور:</h6>
                                 <ul>
@@ -125,9 +189,41 @@ try {
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
-    <?php endif; ?>
     </div>
 
+    <script>
+        const ctx = document.getElementById('workHoursChart');
+        if (ctx) {
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: <?php echo json_encode($chart_labels); ?>,
+                    datasets: [{
+                        label: 'ساعات کاری',
+                        data: <?php echo json_encode($chart_data); ?>,
+                        backgroundColor: 'rgba(0, 46, 54, 0.8)',
+                        borderColor: 'rgba(0, 46, 54, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'ساعت' }
+                        },
+                        x: {
+                            title: { display: true, text: 'روز ماه' }
+                        }
+                    },
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

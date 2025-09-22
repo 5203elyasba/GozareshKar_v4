@@ -14,11 +14,9 @@ $full_name = $_SESSION["full_name"] ?? 'کاربر'; // Fallback
 $role = $_SESSION["role"];
 
 require_once 'ReportCalculator.php';
-$start_date = $_GET['start_date'] ?? null;
-$end_date = $_GET['end_date'] ?? null;
 
 $calculator = new ReportCalculator($pdo);
-$report_data = $calculator->calculateForUser($user_id, $start_date, $end_date);
+$report_data = $calculator->calculateForUser($user_id, null, null);
 
 ?>
 

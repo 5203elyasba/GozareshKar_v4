@@ -47,20 +47,40 @@ try {
     $delete_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
 
     // Insert new work intervals
-    $insert_sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type) VALUES (:user_id, :log_date, :start_time, :end_time, :log_type)";
+    $insert_sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, :log_type, :jalali_year, :jalali_month, :jalali_day)";
     $insert_stmt = $pdo->prepare($insert_sql);
+    $base_params = [
+        ':user_id' => $user_id,
+        ':log_date' => $gregorian_date_str,
+        ':jalali_year' => $year_int,
+        ':jalali_month' => $month_int,
+        ':jalali_day' => $day_int
+    ];
+
     for ($i = 0; $i < count($work_start_times); $i++) {
         $start = $work_start_times[$i];
         $end = $work_end_times[$i];
         if (empty($start) || empty($end) || strtotime($end) <= strtotime($start)) continue;
-        $insert_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str, ':start_time' => $start, ':end_time' => $end, ':log_type' => 'work']);
+
+        $params = array_merge($base_params, [
+            ':start_time' => $start,
+            ':end_time' => $end,
+            ':log_type' => 'work'
+        ]);
+        $insert_stmt->execute($params);
     }
 
     // Insert total break minutes as a single log entry
     if ($total_break_minutes > 0) {
         $break_start_time = '00:00:00';
         $break_end_time = date('H:i:s', strtotime("+$total_break_minutes minutes", strtotime($break_start_time)));
-        $insert_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str, ':start_time' => $break_start_time, ':end_time' => $break_end_time, ':log_type' => 'break']);
+
+        $params = array_merge($base_params, [
+            ':start_time' => $break_start_time,
+            ':end_time' => $break_end_time,
+            ':log_type' => 'break'
+        ]);
+        $insert_stmt->execute($params);
     }
 
     $pdo->commit();
