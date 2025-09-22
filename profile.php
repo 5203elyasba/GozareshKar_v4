@@ -41,20 +41,6 @@ $report_data = $calculator->calculateForUser($user_id, $start_date, $end_date);
                 <h5 class="mb-0">خلاصه گزارش عملکرد</h5>
             </div>
             <div class="card-body">
-                <form action="profile.php" method="get" class="row g-3 align-items-end mb-4">
-                    <div class="col-md-5">
-                        <label for="start_date" class="form-label">از تاریخ</label>
-                        <input type="date" class="form-control" name="start_date" id="start_date" value="<?php echo htmlspecialchars($start_date ?? ''); ?>">
-                    </div>
-                    <div class="col-md-5">
-                        <label for="end_date" class="form-label">تا تاریخ</label>
-                        <input type="date" class="form-control" name="end_date" id="end_date" value="<?php echo htmlspecialchars($end_date ?? ''); ?>">
-                    </div>
-                    <div class="col-md-2">
-                        <button type="submit" class="btn btn-primary w-100">فیلتر</button>
-                    </div>
-                </form>
-                <hr>
                 <?php if ($report_data['success']): ?>
                     <div class="row text-center">
                         <div class="col-md-4">
