@@ -88,7 +88,6 @@ $report_data = $calculator->calculateForUser($user_id, $start_date, $end_date);
             </div>
         </div>
 
-        <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
         <div class="card mt-5">
             <div class="card-header">
                 <h5 class="mb-0">تغییر رمز عبور</h5>
@@ -111,7 +110,6 @@ $report_data = $calculator->calculateForUser($user_id, $start_date, $end_date);
                 </form>
             </div>
         </div>
-        <?php endif; ?>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
