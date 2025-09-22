@@ -10,9 +10,6 @@
                     <a class="nav-link" href="index.php">ثبت گزارش</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="my_reports.php">گزارشات من</a>
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="leave.php">مرخصی</a>
                 </li>
                 <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
