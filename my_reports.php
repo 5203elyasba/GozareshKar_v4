@@ -68,7 +68,7 @@ foreach ($logs_by_day as $day => $data) {
 // --- Fetch available years for the dropdown ---
 $available_years = [];
 try {
-    $years_stmt = $pdo->prepare("SELECT DISTINCT jalali_year FROM time_logs WHERE user_id = :user_id ORDER BY jalali_year DESC");
+    $years_stmt = $pdo->prepare("SELECT DISTINCT jalali_year FROM time_logs WHERE user_id = :user_id AND jalali_year IS NOT NULL ORDER BY jalali_year DESC");
     $years_stmt->execute(['user_id' => $user_id]);
     $available_years = $years_stmt->fetchAll(PDO::FETCH_COLUMN);
 } catch (Exception $e) {

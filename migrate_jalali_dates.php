@@ -1,13 +1,13 @@
 <?php
 // --- One-Time Migration Script ---
 // This script should be run once from the command line or by accessing it in the browser.
-// It populates the new jalali_year, jalali_month, and jalali_day columns for existing records.
+// It populates the new jalali_year, jalali_month, and jalali_day columns for existing records in the `time_logs` table.
 
 require_once 'config.php';
 require_once 'JalaliDate.php';
 
 echo "<!DOCTYPE html><html lang='fa' dir='rtl'><head><title>مهاجرت تاریخ‌های شمسی</title><link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css'></head><body class='container my-5'>";
-echo "<h1>شروع فرآیند مهاجرت تاریخ‌های شمسی...</h1>";
+echo "<h1>شروع فرآیند مهاجرت تاریخ‌های شمسی برای جدول `time_logs`...</h1>";
 
 try {
     $pdo->beginTransaction();
@@ -20,6 +20,7 @@ try {
     if (empty($logs_to_migrate)) {
         echo "<div class='alert alert-info'>هیچ رکوردی برای مهاجرت یافت نشد. به نظر می‌رسد تمام داده‌ها به‌روز هستند.</div>";
         $pdo->commit();
+        echo "</body></html>";
         exit;
     }
 
@@ -31,6 +32,9 @@ try {
     $updated_count = 0;
     foreach ($logs_to_migrate as $log) {
         $gregorian_date = $log['log_date'];
+        if (!$gregorian_date) {
+            continue; // Skip if date is null
+        }
         $jalali_date_str = JalaliDate::toJalali($gregorian_date);
 
         list($j_year, $j_month, $j_day) = explode('/', $jalali_date_str);

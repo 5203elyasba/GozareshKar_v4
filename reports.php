@@ -38,18 +38,19 @@ $summary_data = [];
 
 // Only fetch data if a user is selected
 if ($selected_user_id) {
-    // Fetch user data for calculations
-    $user_sql = "SELECT daily_hours_goal, annual_leave_days FROM users WHERE id = :id";
-    $user_stmt = $pdo->prepare($user_sql);
-    $user_stmt->execute(['id' => $selected_user_id]);
-    $user_data = $user_stmt->fetch(PDO::FETCH_ASSOC);
-
-    // Fetch leave count for the whole year
-    $leave_sql = "SELECT COUNT(*) FROM leave_logs WHERE user_id = :user_id";
-    $leave_stmt = $pdo->prepare($leave_sql);
-    $leave_stmt->execute(['user_id' => $selected_user_id]);
-    $total_leave_days = $leave_stmt->fetchColumn();
     try {
+        // Fetch user data for calculations
+        $user_sql = "SELECT daily_hours_goal, annual_leave_days FROM users WHERE id = :id";
+        $user_stmt = $pdo->prepare($user_sql);
+        $user_stmt->execute(['id' => $selected_user_id]);
+        $user_data = $user_stmt->fetch(PDO::FETCH_ASSOC);
+
+        // Fetch leave count for the whole year
+        $leave_sql = "SELECT COUNT(*) FROM leave_logs WHERE user_id = :user_id";
+        $leave_stmt = $pdo->prepare($leave_sql);
+        $leave_stmt->execute(['user_id' => $selected_user_id]);
+        $total_leave_days = $leave_stmt->fetchColumn();
+
         // Fetch all logs for the selected user, year, and month
         $sql = "SELECT * FROM time_logs WHERE user_id = :user_id AND jalali_year = :year AND jalali_month = :month ORDER BY log_date ASC, start_time ASC";
         $stmt = $pdo->prepare($sql);
