@@ -57,6 +57,7 @@ if ($gregorian_date_str) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $is_editing ? 'ویرایش' : 'ثبت'; ?> گزارش</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -80,10 +81,7 @@ if ($gregorian_date_str) {
                         این روز به عنوان <strong><?php echo $day_property['day_type'] === 'official_holiday' ? 'تعطیل رسمی' : 'روز کاری تعطیل'; ?></strong> با وضعیت <strong><?php echo $day_property['status']; ?></strong> ثبت شده است.
                     </div>
                 <?php endif; ?>
-                <form action="submit_log.php" method="post" id="log-form">
-                    <input type="hidden" name="log_day" value="<?php echo htmlspecialchars($log_date_day); ?>">
-                    <input type="hidden" name="log_month" value="<?php echo htmlspecialchars($log_date_month); ?>">
-                    <input type="hidden" name="log_year" value="<?php echo htmlspecialchars($log_date_year); ?>">
+                <div id="log-form">
                     <div class="mb-4">
                         <label class="form-label fw-bold">تاریخ</label>
                         <div class="row g-2 align-items-center">
@@ -122,15 +120,31 @@ if ($gregorian_date_str) {
                         <?php if (empty($work_logs)): ?>
                             <div class="row g-2 mb-2 align-items-center time-interval-row">
                                 <input type="hidden" name="log_id[]" value="">
-                                <div class="col"><label class="form-label">ساعت ورود</label><input type="time" class="form-control" name="start_time[]"></div>
-                                <div class="col"><label class="form-label">ساعت خروج</label><input type="time" class="form-control" name="end_time[]"></div>
+                                <div class="col input-group">
+                                    <label class="form-label w-100">ساعت ورود</label>
+                                    <input type="text" class="form-control flatpickr-time" name="start_time[]" placeholder="--:--">
+                                    <span class="input-group-text status-icon"></span>
+                                </div>
+                                <div class="col input-group">
+                                    <label class="form-label w-100">ساعت خروج</label>
+                                    <input type="text" class="form-control flatpickr-time" name="end_time[]" placeholder="--:--">
+                                    <span class="input-group-text status-icon"></span>
+                                </div>
                                 <div class="col-auto"><button type="button" class="btn btn-sm btn-danger remove-interval" style="display: none;">-</button></div>
                             </div>
                         <?php else: foreach ($work_logs as $i => $log): ?>
                             <div class="row g-2 mb-2 align-items-center time-interval-row">
                                 <input type="hidden" name="log_id[]" value="<?php echo $log['id']; ?>">
-                                <div class="col"><label class="form-label">ساعت ورود</label><input type="time" class="form-control" name="start_time[]" value="<?php echo htmlspecialchars($log['start']); ?>"></div>
-                                <div class="col"><label class="form-label">ساعت خروج</label><input type="time" class="form-control" name="end_time[]" value="<?php echo htmlspecialchars($log['end']); ?>"></div>
+                                <div class="col input-group">
+                                    <label class="form-label w-100">ساعت ورود</label>
+                                    <input type="text" class="form-control flatpickr-time" name="start_time[]" value="<?php echo htmlspecialchars($log['start']); ?>">
+                                    <span class="input-group-text status-icon"></span>
+                                </div>
+                                <div class="col input-group">
+                                    <label class="form-label w-100">ساعت خروج</label>
+                                    <input type="text" class="form-control flatpickr-time" name="end_time[]" value="<?php echo htmlspecialchars($log['end']); ?>">
+                                    <span class="input-group-text status-icon"></span>
+                                </div>
                                 <div class="col-auto"><button type="button" class="btn btn-sm btn-danger remove-interval" <?php if ($i==0) echo 'style="display: none;"';?>>-</button></div>
                             </div>
                         <?php endforeach; endif; ?>
@@ -150,12 +164,12 @@ if ($gregorian_date_str) {
                             این ساعات به عنوان اضافه‌کار (روز تعطیل/جمعه) ثبت شود.
                         </label>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">ذخیره گزارش</button>
-                </form>
+                </div>
             </div>
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
     <script src="main.js"></script>
 </body>
