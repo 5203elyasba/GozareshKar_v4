@@ -36,15 +36,55 @@ $user_id = $_SESSION["id"];
 $work_start_times = $_POST["start_time"] ?? [];
 $work_end_times = $_POST["end_time"] ?? [];
 $total_break_minutes = (int)($_POST['total_break_minutes'] ?? 0);
+$day_type = $_POST['day_type'] ?? '';
 
 // --- Database Operation (Transaction) ---
 try {
     $pdo->beginTransaction();
 
-    // Delete existing time logs for this user on this date
+    // Always delete existing logs and properties for this day to ensure a clean slate
     $delete_sql = "DELETE FROM time_logs WHERE user_id = :user_id AND log_date = :log_date";
     $delete_stmt = $pdo->prepare($delete_sql);
     $delete_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
+
+    $delete_prop_sql = "DELETE FROM day_properties WHERE user_id = :user_id AND log_date = :log_date";
+    $delete_prop_stmt = $pdo->prepare($delete_prop_sql);
+    $delete_prop_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
+
+    // Handle special day types
+    if ($day_type === 'official_holiday' || $day_type === 'friday_work') {
+        $prop_sql = "INSERT INTO day_properties (user_id, log_date, day_type) VALUES (:user_id, :log_date, :day_type)";
+        $prop_stmt = $pdo->prepare($prop_sql);
+        $prop_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str, ':day_type' => $day_type]);
+    }
+
+    // If it's an official holiday, log the full daily hours and exit
+    if ($day_type === 'official_holiday') {
+        $user_sql = "SELECT daily_hours_goal FROM users WHERE id = :id";
+        $user_stmt = $pdo->prepare($user_sql);
+        $user_stmt->execute(['id' => $user_id]);
+        $daily_goal = $user_stmt->fetchColumn() ?: 8;
+
+        $start_time = '08:00:00';
+        $end_time_ts = strtotime($start_time) + ($daily_goal * 3600);
+        $end_time = date('H:i:s', $end_time_ts);
+
+        $insert_sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
+        $insert_stmt = $pdo->prepare($insert_sql);
+        $insert_stmt->execute([
+            ':user_id' => $user_id,
+            ':log_date' => $gregorian_date_str,
+            ':start_time' => $start_time,
+            ':end_time' => $end_time,
+            ':jalali_year' => $year_int,
+            ':jalali_month' => $month_int,
+            ':jalali_day' => $day_int
+        ]);
+
+        $pdo->commit();
+        header("location: index.php?date={$log_date_jalali}&success=holiday_logged");
+        exit;
+    }
 
     // Insert new work intervals
     $insert_sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, :log_type, :jalali_year, :jalali_month, :jalali_day)";

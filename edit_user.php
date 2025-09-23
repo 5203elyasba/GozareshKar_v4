@@ -111,6 +111,22 @@ try {
                 </form>
             </div>
         </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">تغییر رمز عبور کاربر</h5>
+            </div>
+            <div class="card-body">
+                <form action="handle_admin_change_password.php" method="post">
+                    <input type="hidden" name="user_id" value="<?php echo $user_id; ?>">
+                    <div class="mb-3">
+                        <label for="new_password" class="form-label">رمز عبور جدید</label>
+                        <input type="password" name="new_password" id="new_password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-warning">تغییر رمز عبور</button>
+                </form>
+            </div>
+        </div>
     </div>
 </body>
 </html>

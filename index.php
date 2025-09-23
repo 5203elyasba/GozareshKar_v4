@@ -34,6 +34,18 @@ $date_parts = explode('/', $log_date_jalali);
 $log_date_year = $date_parts[0] ?? '';
 $log_date_month = $date_parts[1] ?? '';
 $log_date_day = $date_parts[2] ?? '';
+
+// Fetch day properties if they exist
+$day_properties = null;
+if ($is_editing) {
+    $prop_sql = "SELECT day_type FROM day_properties WHERE user_id = :user_id AND log_date = :log_date";
+    $prop_stmt = $pdo->prepare($prop_sql);
+    $prop_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
+    $result = $prop_stmt->fetch(PDO::FETCH_ASSOC);
+    if ($result) {
+        $day_properties = $result['day_type'];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -82,6 +94,28 @@ $log_date_day = $date_parts[2] ?? '';
                             <div class="col-auto align-self-end">
                                 <button type="button" id="fetch-date-btn" class="btn btn-outline-secondary">بررسی</button>
                             </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">مشخصات روز</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="day_type" id="day_type_normal" value="" <?php if ($day_properties === null) echo 'checked'; ?>>
+                            <label class="form-check-label" for="day_type_normal">
+                                روز کاری عادی
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="day_type" id="day_type_holiday" value="official_holiday" <?php if ($day_properties === 'official_holiday') echo 'checked'; ?>>
+                            <label class="form-check-label" for="day_type_holiday">
+                                تعطیل رسمی (برایم حضور کامل ثبت شود)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="day_type" id="day_type_overtime" value="friday_work" <?php if ($day_properties === 'friday_work') echo 'checked'; ?>>
+                            <label class="form-check-label" for="day_type_overtime">
+                                کار در روز تعطیل / جمعه (محاسبه به عنوان اضافه‌کار)
+                            </label>
                         </div>
                     </div>
                     <hr>
