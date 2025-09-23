@@ -57,9 +57,9 @@ if ($gregorian_date_str) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $is_editing ? 'ویرایش' : 'ثبت'; ?> گزارش</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="ios-picker.css">
 </head>
 <body>
     <div class="container my-5">
@@ -122,12 +122,12 @@ if ($gregorian_date_str) {
                                 <input type="hidden" name="log_id[]" value="">
                                 <div class="col input-group">
                                     <label class="form-label w-100">ساعت ورود</label>
-                                    <input type="text" class="form-control flatpickr-time" name="start_time[]" placeholder="--:--">
+                                    <input type="text" class="form-control time-input" name="start_time[]" placeholder="--:--" readonly>
                                     <span class="input-group-text status-icon"></span>
                                 </div>
                                 <div class="col input-group">
                                     <label class="form-label w-100">ساعت خروج</label>
-                                    <input type="text" class="form-control flatpickr-time" name="end_time[]" placeholder="--:--">
+                                    <input type="text" class="form-control time-input" name="end_time[]" placeholder="--:--" readonly>
                                     <span class="input-group-text status-icon"></span>
                                 </div>
                                 <div class="col-auto"><button type="button" class="btn btn-sm btn-danger remove-interval" style="display: none;">-</button></div>
@@ -137,12 +137,12 @@ if ($gregorian_date_str) {
                                 <input type="hidden" name="log_id[]" value="<?php echo $log['id']; ?>">
                                 <div class="col input-group">
                                     <label class="form-label w-100">ساعت ورود</label>
-                                    <input type="text" class="form-control flatpickr-time" name="start_time[]" value="<?php echo htmlspecialchars($log['start']); ?>">
+                                    <input type="text" class="form-control time-input" name="start_time[]" value="<?php echo htmlspecialchars($log['start']); ?>" readonly>
                                     <span class="input-group-text status-icon"></span>
                                 </div>
                                 <div class="col input-group">
                                     <label class="form-label w-100">ساعت خروج</label>
-                                    <input type="text" class="form-control flatpickr-time" name="end_time[]" value="<?php echo htmlspecialchars($log['end']); ?>">
+                                    <input type="text" class="form-control time-input" name="end_time[]" value="<?php echo htmlspecialchars($log['end']); ?>" readonly>
                                     <span class="input-group-text status-icon"></span>
                                 </div>
                                 <div class="col-auto"><button type="button" class="btn btn-sm btn-danger remove-interval" <?php if ($i==0) echo 'style="display: none;"';?>>-</button></div>
@@ -169,8 +169,23 @@ if ($gregorian_date_str) {
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
+    <script src="ios-picker.js"></script>
     <script src="main.js"></script>
+
+    <!-- Time Picker Modal -->
+    <div class="time-picker-modal" id="time-picker-modal">
+        <div class="time-picker-container">
+            <div class="time-picker-header">
+                <button type="button" class="btn-close" id="time-picker-close"></button>
+                <h5 class="modal-title">انتخاب زمان</h5>
+                <button type="button" class="btn btn-primary" id="time-picker-save">تایید</button>
+            </div>
+            <div class="time-picker-body">
+                <div id="time-picker-hour"></div>
+                <div id="time-picker-minute"></div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

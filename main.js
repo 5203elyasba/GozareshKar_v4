@@ -52,18 +52,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 <input type="hidden" name="log_id[]" value="">
                  <div class="col input-group">
                     <label class="form-label w-100">ساعت ورود</label>
-                    <input type="text" class="form-control flatpickr-time" name="start_time[]" placeholder="--:--">
+                    <input type="text" class="form-control time-input" name="start_time[]" placeholder="--:--" readonly>
                     <span class="input-group-text status-icon"></span>
                 </div>
                 <div class="col input-group">
                     <label class="form-label w-100">ساعت خروج</label>
-                    <input type="text" class="form-control flatpickr-time" name="end_time[]" placeholder="--:--">
+                    <input type="text" class="form-control time-input" name="end_time[]" placeholder="--:--" readonly>
                     <span class="input-group-text status-icon"></span>
                 </div>
                 <div class="col-auto d-flex align-items-end"><button type="button" class="btn btn-sm btn-danger remove-interval">-</button></div>
             `;
             workContainer.appendChild(newInterval);
-            initFlatpickr(newInterval);
+            // The new init function will need to be called here.
+            // initNewTimePicker(newInterval);
             updateRemoveButtons();
         });
     }
@@ -119,65 +120,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- Auto-Saving Time Picker ---
-    function initFlatpickr(context) {
-        if (typeof flatpickr === 'undefined') { console.error("Flatpickr library is not loaded."); return; }
-
-        const elements = context.querySelectorAll('.flatpickr-time');
-        elements.forEach(el => {
-            flatpickr(el, {
-                enableTime: true,
-                noCalendar: true,
-                dateFormat: "H:i",
-                time_24hr: true,
-                onClose: function(selectedDates, dateStr, instance) {
-                    const row = instance.element.closest('.time-interval-row');
-                    const statusIcon = instance.element.parentElement.querySelector('.status-icon');
-                    const logIdInput = row.querySelector('input[name="log_id[]"]');
-                    const type = instance.element.name.includes('start') ? 'start' : 'end';
-                    const jalaliDate = `${yearInput.value}/${String(monthInput.value).padStart(2,'0')}/${String(dayInput.value).padStart(2,'0')}`;
-
-                    if (!dateStr) {
-                        statusIcon.innerHTML = '';
-                        return;
-                    }
-
-                    statusIcon.innerHTML = '...';
-
-                    fetch('save_time_ajax.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            log_id: logIdInput.value,
-                            log_date: jalaliDate,
-                            time: dateStr,
-                            type: type
-                        })
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.success) {
-                            statusIcon.innerHTML = '✔️';
-                            if (data.log_id && !logIdInput.value) {
-                                logIdInput.value = data.log_id;
-                            }
-                        } else {
-                            statusIcon.innerHTML = '❌';
-                            alert('خطا در ذخیره: ' + data.message);
-                        }
-                    })
-                    .catch(err => {
-                        statusIcon.innerHTML = '❌';
-                        alert('خطای شبکه.');
-                    });
-
-                    validateTimeIntervals();
-                }
-            });
-        });
-    }
-    initFlatpickr(document);
-
     // --- Live Interval Validation ---
     function validateTimeIntervals() {
         if (!workContainer) return;
@@ -218,12 +160,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (workContainer) {
-        workContainer.addEventListener('input', (e) => {
-            const target = e.target;
-            if (target && target.classList.contains('flatpickr-time')) {
-                // The validation is now called from the flatpickr onClose event
-            }
-        });
         validateTimeIntervals();
     }
 
@@ -256,4 +192,138 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+
+    // --- iOS Time Picker Logic ---
+    const modal = document.getElementById('time-picker-modal');
+    const closeBtn = document.getElementById('time-picker-close');
+    const saveBtn = document.getElementById('time-picker-save');
+    let activeInput = null;
+    let hourSelector = null;
+    let minuteSelector = null;
+
+    function createTimeSource(max, pad = 2) {
+        let source = [];
+        for (let i = 0; i < max; i++) {
+            const val = String(i).padStart(pad, '0');
+            source.push({ value: i, text: val });
+        }
+        return source;
+    }
+
+    const hourSource = createTimeSource(24);
+    const minuteSource = createTimeSource(60);
+
+    function initTimePicker() {
+        if (hourSelector) hourSelector.destroy();
+        if (minuteSelector) minuteSelector.destroy();
+
+        hourSelector = new IosSelector({
+            el: '#time-picker-hour',
+            type: 'infinite',
+            source: hourSource,
+            count: 20,
+        });
+
+        minuteSelector = new IosSelector({
+            el: '#time-picker-minute',
+            type: 'infinite',
+            source: minuteSource,
+            count: 20,
+        });
+    }
+
+    function showPicker(inputElement) {
+        activeInput = inputElement;
+        const currentTime = activeInput.value;
+        let [currentHour, currentMinute] = [new Date().getHours(), new Date().getMinutes()];
+
+        if (currentTime && currentTime.includes(':')) {
+            const parts = currentTime.split(':');
+            currentHour = parseInt(parts[0], 10);
+            currentMinute = parseInt(parts[1], 10);
+        }
+
+        initTimePicker();
+
+        setTimeout(() => {
+            hourSelector.select(currentHour);
+            minuteSelector.select(currentMinute);
+            modal.classList.add('show');
+        }, 10);
+    }
+
+    function hidePicker() {
+        modal.classList.remove('show');
+        activeInput = null;
+    }
+
+    function saveTime() {
+        if (!activeInput) return;
+
+        const hour = String(hourSelector.value).padStart(2, '0');
+        const minute = String(minuteSelector.value).padStart(2, '0');
+        const newTime = `${hour}:${minute}`;
+
+        activeInput.value = newTime;
+
+        // --- Trigger AJAX Save ---
+        const row = activeInput.closest('.time-interval-row');
+        const statusIcon = activeInput.parentElement.querySelector('.status-icon');
+        const logIdInput = row.querySelector('input[name="log_id[]"]');
+        const type = activeInput.name.includes('start') ? 'start' : 'end';
+        const jalaliDate = `${yearInput.value}/${String(monthInput.value).padStart(2,'0')}/${String(dayInput.value).padStart(2,'0')}`;
+
+        statusIcon.innerHTML = '...';
+
+        fetch('save_time_ajax.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                log_id: logIdInput.value,
+                log_date: jalaliDate,
+                time: newTime,
+                type: type
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                statusIcon.innerHTML = '✔️';
+                if (data.log_id && !logIdInput.value) {
+                    logIdInput.value = data.log_id;
+                }
+            } else {
+                statusIcon.innerHTML = '❌';
+                alert('خطا در ذخیره: ' + data.message);
+            }
+            validateTimeIntervals();
+        })
+        .catch(err => {
+            statusIcon.innerHTML = '❌';
+            alert('خطای شبکه.');
+            validateTimeIntervals();
+        });
+
+        hidePicker();
+    }
+
+    // Event listeners for picker UI
+    if (modal) {
+        document.body.addEventListener('click', function(e) {
+            if (e.target.classList.contains('time-input')) {
+                showPicker(e.target);
+            }
+        });
+
+        closeBtn.addEventListener('click', hidePicker);
+        saveBtn.addEventListener('click', saveTime);
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                hidePicker();
+            }
+        });
+    }
+
+    // Call validation on page load
+    validateTimeIntervals();
 });
