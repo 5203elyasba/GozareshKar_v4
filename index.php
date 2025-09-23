@@ -4,6 +4,12 @@ require_once 'JalaliDate.php';
 
 if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true){ header("location: login.php"); exit; }
 
+// If user is an admin, redirect them to the admin panel.
+if(isset($_SESSION["role"]) && $_SESSION["role"] === 'admin'){
+    header("location: admin.php");
+    exit;
+}
+
 $log_date_jalali = $_GET['date'] ?? JalaliDate::toJalali(date('Y-m-d'));
 $work_logs = [];
 $total_break_minutes = 0;
@@ -116,20 +122,16 @@ if ($gregorian_date_str) {
                         <?php if (empty($work_logs)): ?>
                             <div class="row g-2 mb-2 align-items-center time-interval-row">
                                 <input type="hidden" name="log_id[]" value="">
-                                <div class="col"><label class="form-label">ساعت ورود</label><input type="text" class="form-control time-input" name="start_time[]" placeholder="HH:MM"></div>
-                                <div class="col-auto"><button type="button" class="btn btn-outline-primary btn-sm btn-log-now" data-type="start">ثبت</button></div>
-                                <div class="col"><label class="form-label">ساعت خروج</label><input type="text" class="form-control time-input" name="end_time[]" placeholder="HH:MM"></div>
-                                <div class="col-auto"><button type="button" class="btn btn-outline-primary btn-sm btn-log-now" data-type="end">ثبت</button></div>
+                                <div class="col"><label class="form-label">ساعت ورود</label><input type="time" class="form-control" name="start_time[]"></div>
+                                <div class="col"><label class="form-label">ساعت خروج</label><input type="time" class="form-control" name="end_time[]"></div>
                                 <div class="col-auto"><button type="button" class="btn btn-sm btn-danger remove-interval" style="display: none;">-</button></div>
                             </div>
                         <?php else: foreach ($work_logs as $i => $log): ?>
                             <div class="row g-2 mb-2 align-items-center time-interval-row">
                                 <input type="hidden" name="log_id[]" value="<?php echo $log['id']; ?>">
-                                <div class="col"><label class="form-label">ساعت ورود</label><input type="text" class="form-control time-input" name="start_time[]" value="<?php echo htmlspecialchars($log['start']); ?>"></div>
-                                <div class="col-auto"><button type="button" class="btn btn-outline-primary btn-sm btn-log-now" data-type="start">ثبت</button></div>
-                                <div class="col"><label class="form-label">ساعت خروج</label><input type="text" class="form-control time-input" name="end_time[]" value="<?php echo htmlspecialchars($log['end']); ?>"></div>
-                                <div class="col-auto"><button type="button" class="btn btn-outline-primary btn-sm btn-log-now" data-type="end">ثبت</button></div>
-                                <div class="col-auto"><button type="button" class="btn btn-sm btn-danger remove-interval" <?php if ($i==0 && count($work_logs) == 1) echo 'style="display: none;"';?>>-</button></div>
+                                <div class="col"><label class="form-label">ساعت ورود</label><input type="time" class="form-control" name="start_time[]" value="<?php echo htmlspecialchars($log['start']); ?>"></div>
+                                <div class="col"><label class="form-label">ساعت خروج</label><input type="time" class="form-control" name="end_time[]" value="<?php echo htmlspecialchars($log['end']); ?>"></div>
+                                <div class="col-auto"><button type="button" class="btn btn-sm btn-danger remove-interval" <?php if ($i==0) echo 'style="display: none;"';?>>-</button></div>
                             </div>
                         <?php endforeach; endif; ?>
                     </div>
@@ -155,7 +157,6 @@ if ($gregorian_date_str) {
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
-    <script src="https://unpkg.com/imask"></script>
     <script src="main.js"></script>
 </body>
 </html>
