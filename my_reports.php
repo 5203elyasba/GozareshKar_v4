@@ -49,7 +49,16 @@ try {
     $stmt->execute(['user_id' => $user_id, 'year' => $selected_year, 'month' => $selected_month]);
     $all_logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // 3. Calculate Required Work Hours for the month
+    // 3. Fetch approved holidays for the month
+    $first_day_gregorian = JalaliDate::fromJalaliToDateTime("$selected_year/$selected_month/01")->format('Y-m-d');
+    $holiday_sql = "SELECT COUNT(*) FROM day_properties WHERE user_id = :user_id AND day_type = 'official_holiday' AND status = 'approved' AND YEAR(log_date) = YEAR(:date) AND MONTH(log_date) = MONTH(:date)";
+    $holiday_stmt = $pdo->prepare($holiday_sql);
+    $holiday_stmt->execute(['user_id' => $user_id, 'date' => $first_day_gregorian]);
+    $approved_holidays_count = $holiday_stmt->fetchColumn();
+    $summary['holiday_credit_hours'] = $approved_holidays_count * $daily_goal;
+
+
+    // 4. Calculate Required Work Hours for the month
     $days_in_month = JalaliDate::daysInMonth($selected_year, $selected_month);
     $fridays_in_month = 0;
     for ($d = 1; $d <= $days_in_month; $d++) {
@@ -58,10 +67,11 @@ try {
             $fridays_in_month++;
         }
     }
-    $required_workdays = $days_in_month - $fridays_in_month;
+    // Required workdays are non-Friday days, MINUS any official holidays that fall on a workday
+    $required_workdays = $days_in_month - $fridays_in_month - $approved_holidays_count;
     $summary['required_work_hours'] = $required_workdays * $daily_goal;
 
-    // 4. Process all logs
+    // 5. Process all logs
     foreach ($all_logs as $log) {
         $day = $log['jalali_day'];
         if (!isset($logs_by_day[$day])) {
@@ -89,7 +99,7 @@ try {
     }
 
     // 5. Calculate final deficit/surplus
-    $summary['deficit_surplus_hours'] = $summary['monthly_total_hours'] - $summary['required_work_hours'];
+    $summary['deficit_surplus_hours'] = ($summary['monthly_total_hours'] + $summary['holiday_credit_hours']) - $summary['required_work_hours'];
 
     ksort($logs_by_day);
 

@@ -2,7 +2,6 @@
 require_once 'config.php';
 require_once 'JalaliDate.php';
 
-// Authenticate user
 if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
     header("location: login.php");
     exit;
@@ -12,82 +11,66 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     exit;
 }
 
-// --- Data Retrieval & Validation ---
+$user_id = $_SESSION["id"];
+
+// --- Common Date Processing ---
 if (!isset($_POST['log_day'], $_POST['log_month'], $_POST['log_year'])) {
     die("خطا: فیلدهای تاریخ ارسال نشده‌اند.");
 }
-if (!is_numeric($_POST['log_day']) || !is_numeric($_POST['log_month']) || !is_numeric($_POST['log_year'])) {
-    die("خطا: مقادیر تاریخ باید عددی باشند.");
-}
-
 $day_int = (int)$_POST['log_day'];
 $month_int = (int)$_POST['log_month'];
 $year_int = (int)$_POST['log_year'];
 
-// The JalaliDate class's conversion function will return false for an invalid logical date (e.g., 1403/06/32)
-// This is the correct way to validate, instead of using the Gregorian checkdate() function.
 $log_date_jalali = sprintf('%04d/%02d/%02d', $year_int, $month_int, $day_int);
 $gregorian_date_obj = JalaliDate::fromJalaliToDateTime($log_date_jalali);
 if ($gregorian_date_obj === false) { die("خطا در تبدیل تاریخ شمسی."); }
 $gregorian_date_str = $gregorian_date_obj->format('Y-m-d');
 
-// --- Data Retrieval (continued) ---
-$user_id = $_SESSION["id"];
-$work_start_times = $_POST["start_time"] ?? [];
-$work_end_times = $_POST["end_time"] ?? [];
-$total_break_minutes = (int)($_POST['total_break_minutes'] ?? 0);
-$day_type = $_POST['day_type'] ?? '';
+// --- Determine Action Type ---
+$action_type = $_POST['day_type'] ?? 'log_time';
 
-// --- Database Operation (Transaction) ---
+
 try {
     $pdo->beginTransaction();
 
-    // Always delete existing logs and properties for this day to ensure a clean slate
-    $delete_sql = "DELETE FROM time_logs WHERE user_id = :user_id AND log_date = :log_date";
-    $delete_stmt = $pdo->prepare($delete_sql);
-    $delete_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
-
+    // Always clear existing properties for this day to avoid conflicts
     $delete_prop_sql = "DELETE FROM day_properties WHERE user_id = :user_id AND log_date = :log_date";
     $delete_prop_stmt = $pdo->prepare($delete_prop_sql);
     $delete_prop_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
 
-    // Handle special day types
-    if ($day_type === 'official_holiday' || $day_type === 'friday_work') {
-        $prop_sql = "INSERT INTO day_properties (user_id, log_date, day_type) VALUES (:user_id, :log_date, :day_type)";
-        $prop_stmt = $pdo->prepare($prop_sql);
-        $prop_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str, ':day_type' => $day_type]);
-    }
+    // --- Holiday Request Logic ---
+    if ($action_type === 'official_holiday_request') {
+        $insert_prop_sql = "INSERT INTO day_properties (user_id, log_date, day_type, status) VALUES (:user_id, :log_date, 'official_holiday', 'pending')";
+        $insert_prop_stmt = $pdo->prepare($insert_prop_sql);
+        $insert_prop_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
 
-    // If it's an official holiday, log the full daily hours and exit
-    if ($day_type === 'official_holiday') {
-        $user_sql = "SELECT daily_hours_goal FROM users WHERE id = :id";
-        $user_stmt = $pdo->prepare($user_sql);
-        $user_stmt->execute(['id' => $user_id]);
-        $daily_goal = $user_stmt->fetchColumn() ?: 8;
-
-        $start_time = '08:00:00';
-        $end_time_ts = strtotime($start_time) + ($daily_goal * 3600);
-        $end_time = date('H:i:s', $end_time_ts);
-
-        $insert_sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
-        $insert_stmt = $pdo->prepare($insert_sql);
-        $insert_stmt->execute([
-            ':user_id' => $user_id,
-            ':log_date' => $gregorian_date_str,
-            ':start_time' => $start_time,
-            ':end_time' => $end_time,
-            ':jalali_year' => $year_int,
-            ':jalali_month' => $month_int,
-            ':jalali_day' => $day_int
-        ]);
+        // Also clear any time logs for that day, as it's now a pending holiday
+        $delete_log_sql = "DELETE FROM time_logs WHERE user_id = :user_id AND log_date = :log_date";
+        $delete_log_stmt = $pdo->prepare($delete_log_sql);
+        $delete_log_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
 
         $pdo->commit();
-        header("location: index.php?date={$log_date_jalali}&success=holiday_logged");
+        header("location: index.php?date={$log_date_jalali}&success=holiday_requested");
         exit;
     }
 
-    // Insert new work intervals
-    $insert_sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, :log_type, :jalali_year, :jalali_month, :jalali_day)";
+    // --- Time Logging Logic ---
+    $is_overtime = isset($_POST['is_overtime']) && $_POST['is_overtime'] == '1';
+    if ($is_overtime) {
+        $prop_sql = "INSERT INTO day_properties (user_id, log_date, day_type, status) VALUES (:user_id, :log_date, 'friday_work', 'approved')";
+        $prop_stmt = $pdo->prepare($prop_sql);
+        $prop_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
+    }
+
+    // Clear previous time logs for this day
+    $delete_log_sql = "DELETE FROM time_logs WHERE user_id = :user_id AND log_date = :log_date";
+    $delete_log_stmt = $pdo->prepare($delete_log_sql);
+    $delete_log_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
+
+    $work_start_times = $_POST["start_time"] ?? [];
+    $work_end_times = $_POST["end_time"] ?? [];
+
+    $insert_sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
     $insert_stmt = $pdo->prepare($insert_sql);
     $base_params = [
         ':user_id' => $user_id,
@@ -97,6 +80,7 @@ try {
         ':jalali_day' => $day_int
     ];
 
+    $has_entries = false;
     for ($i = 0; $i < count($work_start_times); $i++) {
         $start = $work_start_times[$i];
         $end = $work_end_times[$i];
@@ -108,23 +92,18 @@ try {
             ':log_type' => 'work'
         ]);
         $insert_stmt->execute($params);
+        $has_entries = true;
     }
 
-    // Insert total break minutes as a single log entry
-    if ($total_break_minutes > 0) {
-        $break_start_time = '00:00:00';
-        $break_end_time = date('H:i:s', strtotime("+$total_break_minutes minutes", strtotime($break_start_time)));
-
-        $params = array_merge($base_params, [
-            ':start_time' => $break_start_time,
-            ':end_time' => $break_end_time,
-            ':log_type' => 'break'
-        ]);
-        $insert_stmt->execute($params);
+    if (!$has_entries) {
+        // If user submitted an empty form, just redirect without error
+        $pdo->commit();
+        header("location: index.php?date={$log_date_jalali}");
+        exit;
     }
 
     $pdo->commit();
-    header("location: reports.php?success=1");
+    header("location: my_reports.php?year={$year_int}&month={$month_int}");
 
 } catch (Exception $e) {
     $pdo->rollBack();
