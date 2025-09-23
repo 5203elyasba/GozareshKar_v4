@@ -69,4 +69,36 @@ class JalaliDate {
         $latin = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
         return str_replace($persian, $latin, $string);
     }
+
+    /**
+     * Checks if a given Jalali year is a leap year.
+     * @param int $year The Jalali year.
+     * @return bool True if it's a leap year, false otherwise.
+     */
+    public static function isLeapJalali(int $year): bool {
+        // The 33-year cycle is the most common and accurate method.
+        // The cycle starts from year 1. We check if the year falls into specific remainder patterns.
+        $rem = ($year - 1) % 33;
+        return in_array($rem, [0, 4, 8, 12, 16, 20, 24, 28]);
+    }
+
+    /**
+     * Returns the number of days in a given Jalali month.
+     * @param int $year The Jalali year.
+     * @param int $month The Jalali month (1-12).
+     * @return int The number of days in the month.
+     */
+    public static function daysInMonth(int $year, int $month): int {
+        if ($month < 1 || $month > 12) {
+            return 0;
+        }
+        if ($month <= 6) {
+            return 31;
+        }
+        if ($month <= 11) {
+            return 30;
+        }
+        // Last month (Esfand)
+        return self::isLeapJalali($year) ? 30 : 29;
+    }
 }
