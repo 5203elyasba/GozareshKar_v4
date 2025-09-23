@@ -59,22 +59,11 @@ try {
         $new_log_id = $log_id;
     } else {
         // INSERT new record
-        $start_time = ($type === 'start') ? $time : '00:00:00';
-        $end_time = ($type === 'end') ? $time : '00:00:00';
+        $start_time = ($type === 'start') ? $time : null;
+        $end_time = ($type === 'end') ? $time : null;
 
-        // Check for an existing partial record for this user/date to avoid duplicates
-        $check_sql = "SELECT id FROM time_logs WHERE user_id = :user_id AND log_date = :log_date AND start_time = '00:00:00' AND log_type = 'work'";
-        $check_stmt = $pdo->prepare($check_sql);
-        $check_stmt->execute(['user_id' => $user_id, 'log_date' => $log_date_gregorian]);
-        $existing_partial = $check_stmt->fetch();
-
-        if ($existing_partial && $type === 'end') {
-            // Update the existing partial record with the end time
-            $sql = "UPDATE time_logs SET end_time = :time WHERE id = :id";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute(['time' => $end_time, 'id' => $existing_partial['id']]);
-            $new_log_id = $existing_partial['id'];
-        } else {
+        // This logic is now simplified. We just insert a new record.
+        // The main form handles multiple intervals. The AJAX is for quick logging.
             $sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([

@@ -29,6 +29,38 @@ $gregorian_date_str = $gregorian_date_obj->format('Y-m-d');
 // --- Determine Action Type ---
 $action_type = $_POST['day_type'] ?? 'log_time';
 
+// --- Validation for Time Logging ---
+if ($action_type === 'log_time') {
+    $work_start_times = $_POST["start_time"] ?? [];
+    $work_end_times = $_POST["end_time"] ?? [];
+    $intervals = [];
+
+    for ($i = 0; $i < count($work_start_times); $i++) {
+        if (!empty($work_start_times[$i]) && !empty($work_end_times[$i])) {
+            $start = strtotime($work_start_times[$i]);
+            $end = strtotime($work_end_times[$i]);
+
+            if ($start === false || $end === false || $end <= $start) {
+                header("location: index.php?date={$log_date_jalali}&error=" . urlencode("زمان خروج باید بعد از زمان ورود باشد."));
+                exit;
+            }
+            $intervals[] = ['start' => $start, 'end' => $end];
+        }
+    }
+
+    // Sort intervals by start time to check for overlaps
+    usort($intervals, function($a, $b) {
+        return $a['start'] <=> $b['start'];
+    });
+
+    for ($i = 1; $i < count($intervals); $i++) {
+        if ($intervals[$i]['start'] < $intervals[$i-1]['end']) {
+            header("location: index.php?date={$log_date_jalali}&error=" . urlencode("بازه های زمانی نباید همپوشانی داشته باشند."));
+            exit;
+        }
+    }
+}
+
 
 try {
     $pdo->beginTransaction();

@@ -137,6 +137,60 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // --- Live Interval Validation ---
+    const mainForm = document.getElementById('log-form');
+    const submitBtn = mainForm ? mainForm.querySelector('button[type="submit"]') : null;
+
+    function validateTimeIntervals() {
+        if (!workContainer) return;
+        const rows = workContainer.querySelectorAll('.time-interval-row');
+        let isValid = true;
+        let intervals = [];
+
+        // First pass: collect and validate individual rows
+        rows.forEach(row => {
+            const startInput = row.querySelector('input[name="start_time[]"]');
+            const endInput = row.querySelector('input[name="end_time[]"]');
+            row.classList.remove('is-invalid');
+
+            if (startInput.value && endInput.value) {
+                if (endInput.value <= startInput.value) {
+                    row.classList.add('is-invalid');
+                    isValid = false;
+                } else {
+                    intervals.push({ start: startInput.value, end: endInput.value, row: row });
+                }
+            }
+        });
+
+        // Second pass: check for overlaps
+        if (isValid && intervals.length > 1) {
+            intervals.sort((a, b) => a.start.localeCompare(b.start));
+            for (let i = 1; i < intervals.length; i++) {
+                if (intervals[i].start < intervals[i-1].end) {
+                    intervals[i].row.classList.add('is-invalid');
+                    intervals[i-1].row.classList.add('is-invalid');
+                    isValid = false;
+                }
+            }
+        }
+
+        if (submitBtn) {
+            submitBtn.disabled = !isValid;
+            submitBtn.title = isValid ? '' : 'لطفا خطاهای موجود در بازه های زمانی را برطرف کنید.';
+        }
+    }
+
+    if (workContainer) {
+        workContainer.addEventListener('change', (e) => {
+            if (e.target && e.target.classList.contains('time-input')) {
+                validateTimeIntervals();
+            }
+        });
+        validateTimeIntervals(); // Initial validation on page load
+    }
+
+
     // --- "Log Now" AJAX Logic ---
     workContainer.addEventListener('click', function(e) {
         if (!e.target.classList.contains('btn-log-now')) return;

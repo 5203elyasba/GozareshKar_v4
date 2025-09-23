@@ -21,8 +21,8 @@ if ($gregorian_date_obj) {
         if ($log['log_type'] === 'work') {
             $work_logs[] = [
                 'id' => $log['id'],
-                'start' => date('H:i', strtotime($log['start_time'])),
-                'end' => date('H:i', strtotime($log['end_time']))
+                'start' => $log['start_time'] ? date('H:i', strtotime($log['start_time'])) : '',
+                'end' => $log['end_time'] ? date('H:i', strtotime($log['end_time'])) : ''
             ];
         } else {
             $diff = (new DateTime($log['end_time']))->getTimestamp() - (new DateTime($log['start_time']))->getTimestamp();

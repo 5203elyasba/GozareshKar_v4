@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once 'JalaliDate.php';
 
 // Authentication and Authorization
 if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
@@ -82,8 +83,8 @@ try {
                                     <tr>
                                         <td><?php echo htmlspecialchars($user['username']); ?></td>
                                         <td><?php echo htmlspecialchars($user['full_name']); ?></td>
-                                        <td><?php echo htmlspecialchars($user['role']); ?></td>
-                                        <td><?php echo date('Y-m-d', strtotime($user['created_at'])); ?></td>
+                                        <td><?php echo ($user['role'] === 'admin') ? 'مدیر' : 'کارمند'; ?></td>
+                                        <td><?php echo JalaliDate::toJalali($user['created_at']); ?></td>
                                         <td>
                                             <a href="edit_user.php?id=<?php echo $user['id']; ?>" class="btn btn-info btn-sm">ویرایش</a>
                                             <button type="button" class="btn btn-danger btn-sm btn-delete-user" data-userid="<?php echo $user['id']; ?>" data-username="<?php echo htmlspecialchars($user['username']); ?>">حذف</button>

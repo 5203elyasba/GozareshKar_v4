@@ -3,7 +3,6 @@
 -- =================================================================
 
 -- بخش اول: افزودن ستون‌های تاریخ شمسی برای گزارش‌گیری بهینه
--- نکته: این دستور اگر قبلا اجرا شده باشد، ممکن است خطا دهد که طبیعی است.
 ALTER TABLE `time_logs`
 ADD COLUMN `jalali_year` INT(4) NULL DEFAULT NULL AFTER `log_type`,
 ADD COLUMN `jalali_month` INT(2) NULL DEFAULT NULL AFTER `jalali_year`,
@@ -22,3 +21,7 @@ CREATE TABLE IF NOT EXISTS `day_properties` (
   UNIQUE KEY `user_id_log_date` (`user_id`,`log_date`),
   CONSTRAINT `day_properties_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- بخش سوم: اصلاح جدول لاگ‌های زمانی برای رفع باگ ساعت 00:00
+ALTER TABLE `time_logs`
+MODIFY COLUMN `end_time` time NULL DEFAULT NULL;

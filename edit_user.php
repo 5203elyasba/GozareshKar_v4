@@ -13,24 +13,56 @@ if (!$user_id) {
     exit;
 }
 
-$user = null;
-$full_name = '';
-$role = '';
+// Fetch user data first to use in validation
+try {
+    $sql = "SELECT username, full_name, role, daily_hours_goal, annual_leave_days FROM users WHERE id = :id";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute(['id' => $user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($user) {
+        $username = $user['username'];
+        $full_name = $user['full_name'];
+        $role = $user['role'];
+        $daily_hours_goal = $user['daily_hours_goal'];
+        $annual_leave_days = $user['annual_leave_days'];
+    } else {
+        header("location: admin.php?error=not_found");
+        exit;
+    }
+} catch (PDOException $e) {
+    die("ERROR: Could not fetch user data. " . $e->getMessage());
+}
+
 
 // Handle form submission
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['full_name'])) { // Check for main form submission
     $full_name = trim($_POST['full_name']);
+    $username = trim($_POST['username']);
     $role = $_POST['role'];
     $daily_hours_goal = filter_input(INPUT_POST, 'daily_hours_goal', FILTER_VALIDATE_FLOAT);
     $annual_leave_days = filter_input(INPUT_POST, 'annual_leave_days', FILTER_VALIDATE_INT);
 
-    if (empty($full_name) || ($role !== 'admin' && $role !== 'employee') || $daily_hours_goal === false || $annual_leave_days === false) {
+    $error = '';
+    // Basic validation
+    if (empty($full_name) || empty($username) || ($role !== 'admin' && $role !== 'employee') || $daily_hours_goal === false || $annual_leave_days === false) {
         $error = "لطفا تمام فیلدها را به درستی پر کنید.";
-    } else {
+    }
+    // Check for username uniqueness if it has changed
+    if (empty($error) && $username !== $user['username']) {
+        $sql = "SELECT id FROM users WHERE username = :username";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(['username' => $username]);
+        if ($stmt->rowCount() > 0) {
+            $error = "این نام کاربری قبلا ثبت شده است.";
+        }
+    }
+
+    if (empty($error)) {
         try {
-            $sql = "UPDATE users SET full_name = :full_name, role = :role, daily_hours_goal = :daily_hours_goal, annual_leave_days = :annual_leave_days WHERE id = :id";
+            $sql = "UPDATE users SET username = :username, full_name = :full_name, role = :role, daily_hours_goal = :daily_hours_goal, annual_leave_days = :annual_leave_days WHERE id = :id";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
+                'username' => $username,
                 'full_name' => $full_name,
                 'role' => $role,
                 'daily_hours_goal' => $daily_hours_goal,
@@ -43,25 +75,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $error = "خطای پایگاه داده: " . $e->getMessage();
         }
     }
-}
-
-// Fetch user data for the form
-try {
-    $sql = "SELECT full_name, role, daily_hours_goal, annual_leave_days FROM users WHERE id = :id";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute(['id' => $user_id]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($user) {
-        $full_name = $user['full_name'];
-        $role = $user['role'];
-        $daily_hours_goal = $user['daily_hours_goal'];
-        $annual_leave_days = $user['annual_leave_days'];
-    } else {
-        header("location: admin.php?error=not_found");
-        exit;
-    }
-} catch (PDOException $e) {
-    die("ERROR: Could not fetch user data. " . $e->getMessage());
 }
 ?>
 
@@ -87,9 +100,15 @@ try {
                     <div class="alert alert-danger"><?php echo $error; ?></div>
                 <?php endif; ?>
                 <form action="edit_user.php?id=<?php echo $user_id; ?>" method="post">
-                    <div class="mb-3">
-                        <label for="full_name" class="form-label">نام کامل</label>
-                        <input type="text" class="form-control" name="full_name" id="full_name" value="<?php echo htmlspecialchars($full_name); ?>" required>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="full_name" class="form-label">نام کامل</label>
+                            <input type="text" class="form-control" name="full_name" id="full_name" value="<?php echo htmlspecialchars($full_name); ?>" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="username" class="form-label">نام کاربری</label>
+                            <input type="text" class="form-control" name="username" id="username" value="<?php echo htmlspecialchars($username); ?>" required>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label for="role" class="form-label">نقش</label>
