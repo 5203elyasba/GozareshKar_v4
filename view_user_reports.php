@@ -173,6 +173,7 @@ try {
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
+    <?php endif; ?>
          <a href="admin.php" class="btn btn-secondary mt-4">بازگشت به پنل مدیریت</a>
     </div>
 
