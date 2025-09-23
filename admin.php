@@ -84,7 +84,6 @@ try {
                                         <td><?php echo htmlspecialchars($user['role']); ?></td>
                                         <td><?php echo date('Y-m-d', strtotime($user['created_at'])); ?></td>
                                         <td>
-                                            <a href="view_user_reports.php?user_id=<?php echo $user['id']; ?>" class="btn btn-success btn-sm">گزارشات</a>
                                             <a href="edit_user.php?id=<?php echo $user['id']; ?>" class="btn btn-info btn-sm">ویرایش</a>
                                             <button type="button" class="btn btn-danger btn-sm btn-delete-user" data-userid="<?php echo $user['id']; ?>" data-username="<?php echo htmlspecialchars($user['username']); ?>">حذف</button>
                                         </td>
@@ -124,6 +123,16 @@ try {
                                 <option value="employee" selected>کارمند (Employee)</option>
                                 <option value="admin">مدیر (Admin)</option>
                             </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="daily_hours_goal" class="form-label">ساعات کاری روزانه</label>
+                            <input type="number" step="0.1" class="form-control" name="daily_hours_goal" id="daily_hours_goal" value="8" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="annual_leave_days" class="form-label">مرخصی سالانه (روز)</label>
+                            <input type="number" class="form-control" name="annual_leave_days" id="annual_leave_days" value="26" required>
                         </div>
                     </div>
                     <button type="submit" class="btn btn-success">ذخیره کاربر</button>

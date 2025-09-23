@@ -13,6 +13,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = trim($_POST['password']);
     $full_name = trim($_POST['full_name']);
     $role = $_POST['role'];
+    $daily_hours_goal = filter_input(INPUT_POST, 'daily_hours_goal', FILTER_VALIDATE_FLOAT);
+    $annual_leave_days = filter_input(INPUT_POST, 'annual_leave_days', FILTER_VALIDATE_INT);
 
     $errors = [];
     if (empty($username)) {
@@ -29,6 +31,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
     if ($role !== 'admin' && $role !== 'employee') {
         $errors[] = "نقش نامعتبر است.";
+    }
+    if ($daily_hours_goal === false || $daily_hours_goal <= 0) {
+        $errors[] = "ساعات کاری روزانه باید یک عدد معتبر و بزرگتر از صفر باشد.";
+    }
+    if ($annual_leave_days === false || $annual_leave_days < 0) {
+        $errors[] = "مرخصی سالانه باید یک عدد معتبر باشد.";
     }
 
     // Check if username already exists
@@ -50,13 +58,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // If no errors, insert into database
     if (empty($errors)) {
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-        $sql = "INSERT INTO users (username, password, full_name, role) VALUES (:username, :password, :full_name, :role)";
+        $sql = "INSERT INTO users (username, password, full_name, role, daily_hours_goal, annual_leave_days) VALUES (:username, :password, :full_name, :role, :daily_hours_goal, :annual_leave_days)";
 
         if ($stmt = $pdo->prepare($sql)) {
             $stmt->bindParam(":username", $username, PDO::PARAM_STR);
             $stmt->bindParam(":password", $hashed_password, PDO::PARAM_STR);
             $stmt->bindParam(":full_name", $full_name, PDO::PARAM_STR);
             $stmt->bindParam(":role", $role, PDO::PARAM_STR);
+            $stmt->bindParam(":daily_hours_goal", $daily_hours_goal);
+            $stmt->bindParam(":annual_leave_days", $annual_leave_days, PDO::PARAM_INT);
 
             if ($stmt->execute()) {
                 header("location: admin.php?success=user_created");

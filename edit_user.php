@@ -21,14 +21,22 @@ $role = '';
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $full_name = trim($_POST['full_name']);
     $role = $_POST['role'];
+    $daily_hours_goal = filter_input(INPUT_POST, 'daily_hours_goal', FILTER_VALIDATE_FLOAT);
+    $annual_leave_days = filter_input(INPUT_POST, 'annual_leave_days', FILTER_VALIDATE_INT);
 
-    if (empty($full_name) || ($role !== 'admin' && $role !== 'employee')) {
+    if (empty($full_name) || ($role !== 'admin' && $role !== 'employee') || $daily_hours_goal === false || $annual_leave_days === false) {
         $error = "لطفا تمام فیلدها را به درستی پر کنید.";
     } else {
         try {
-            $sql = "UPDATE users SET full_name = :full_name, role = :role WHERE id = :id";
+            $sql = "UPDATE users SET full_name = :full_name, role = :role, daily_hours_goal = :daily_hours_goal, annual_leave_days = :annual_leave_days WHERE id = :id";
             $stmt = $pdo->prepare($sql);
-            $stmt->execute(['full_name' => $full_name, 'role' => $role, 'id' => $user_id]);
+            $stmt->execute([
+                'full_name' => $full_name,
+                'role' => $role,
+                'daily_hours_goal' => $daily_hours_goal,
+                'annual_leave_days' => $annual_leave_days,
+                'id' => $user_id
+            ]);
             header("location: admin.php?success=user_updated");
             exit;
         } catch (PDOException $e) {
@@ -39,13 +47,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 // Fetch user data for the form
 try {
-    $sql = "SELECT full_name, role FROM users WHERE id = :id";
+    $sql = "SELECT full_name, role, daily_hours_goal, annual_leave_days FROM users WHERE id = :id";
     $stmt = $pdo->prepare($sql);
     $stmt->execute(['id' => $user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($user) {
         $full_name = $user['full_name'];
         $role = $user['role'];
+        $daily_hours_goal = $user['daily_hours_goal'];
+        $annual_leave_days = $user['annual_leave_days'];
     } else {
         header("location: admin.php?error=not_found");
         exit;
@@ -87,6 +97,14 @@ try {
                             <option value="employee" <?php if($role === 'employee') echo 'selected'; ?>>کارمند</option>
                             <option value="admin" <?php if($role === 'admin') echo 'selected'; ?>>مدیر</option>
                         </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="daily_hours_goal" class="form-label">ساعات کاری روزانه</label>
+                        <input type="number" step="0.1" class="form-control" name="daily_hours_goal" id="daily_hours_goal" value="<?php echo htmlspecialchars($daily_hours_goal); ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="annual_leave_days" class="form-label">مرخصی سالانه (روز)</label>
+                        <input type="number" class="form-control" name="annual_leave_days" id="annual_leave_days" value="<?php echo htmlspecialchars($annual_leave_days); ?>" required>
                     </div>
                     <button type="submit" class="btn btn-success">ذخیره تغییرات</button>
                     <a href="admin.php" class="btn btn-secondary">انصراف</a>
