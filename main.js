@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const hourSelect = row.querySelector(`select[name="${e.target.dataset.type}_hour"]`);
         const minuteSelect = row.querySelector(`select[name="${e.target.dataset.type}_minute"]`);
 
-        // **CRITICAL CHANGE**: Save as soon as one part of the time is selected.
+        // Save as soon as one part of the time (hour and minute) is selected.
         if (hourSelect.value && minuteSelect.value) {
             const timeToSave = `${hourSelect.value}:${minuteSelect.value}`;
 
@@ -113,7 +113,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     setStatus(statusIcon, 'success');
                     if (data.log_id && !row.dataset.logId) {
                         row.dataset.logId = data.log_id;
-                        // Update the data-log-id for all select elements in this row
                         row.querySelectorAll('.time-select').forEach(sel => sel.dataset.logId = data.log_id);
                     }
                 } else {
@@ -135,8 +134,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 setStatus(dayTypeStatus, 'success');
-                // Reload to reflect changes server-side, especially clearing time logs
-                window.location.reload();
+                window.location.reload(); // Reload to get fresh state from server
             } else {
                 setStatus(dayTypeStatus, 'error', data.message);
             }

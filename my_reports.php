@@ -108,8 +108,10 @@ try {
         if (isset($time_logs_by_date[$gregorian_date_str])) {
             $daily_total_seconds = 0;
             foreach ($time_logs_by_date[$gregorian_date_str] as $log) {
-                $daily_total_seconds += strtotime($log['end_time']) - strtotime($log['start_time']);
-                $logs_by_day[$d]['entries'][] = date('H:i', strtotime($log['start_time'])) . ' - ' . date('H:i', strtotime($log['end_time']));
+                if ($log['start_time'] && $log['end_time']) {
+                    $daily_total_seconds += strtotime($log['end_time']) - strtotime($log['start_time']);
+                    $logs_by_day[$d]['entries'][] = date('H:i', strtotime($log['start_time'])) . ' - ' . date('H:i', strtotime($log['end_time']));
+                }
             }
             $daily_hours = $daily_total_seconds / 3600;
             $logs_by_day[$d]['work_hours'] = $daily_hours;

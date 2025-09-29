@@ -4,7 +4,6 @@ require_once 'JalaliDate.php';
 
 header('Content-Type: application/json');
 
-// --- Authentication & Basic Validation ---
 if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
     echo json_encode(['success' => false, 'message' => 'Authentication required.']);
     exit;
@@ -15,24 +14,17 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 }
 
 $data = json_decode(file_get_contents('php://input'), true);
-if (!$data) {
-    echo json_encode(['success' => false, 'message' => 'Invalid JSON payload.']);
-    exit;
-}
-
-// --- Data Sanitization & Validation ---
-$log_id = isset($data['log_id']) && !empty($data['log_id']) ? (int)$data['log_id'] : null;
-$log_date_jalali = $data['log_date_jalali'] ?? null;
-$time = $data['time'] ?? null;
-$type = $data['type'] ?? null; // 'start' or 'end'
-$user_id = $_SESSION['id'];
-
-if (!$log_date_jalali || !$time || !$type) {
+if (!$data || !isset($data['log_date_jalali']) || !isset($data['time']) || !isset($data['type'])) {
     echo json_encode(['success' => false, 'message' => 'Missing required fields.']);
     exit;
 }
 
-// Convert Jalali to Gregorian for DB
+$log_id = isset($data['log_id']) && !empty($data['log_id']) ? (int)$data['log_id'] : null;
+$log_date_jalali = $data['log_date_jalali'];
+$time = $data['time'];
+$type = $data['type']; // 'start' or 'end'
+$user_id = $_SESSION['id'];
+
 $gregorian_date_obj = JalaliDate::fromJalaliToDateTime($log_date_jalali);
 if (!$gregorian_date_obj) {
     echo json_encode(['success' => false, 'message' => 'Invalid Jalali date format.']);
@@ -46,37 +38,47 @@ try {
     $new_log_id = $log_id;
 
     if ($log_id) {
-        // UPDATE existing record
-        $column_to_update = ($type === 'start') ? 'start_time' : 'end_time';
-        $sql = "UPDATE time_logs SET $column_to_update = :time WHERE id = :id AND user_id = :user_id";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([':time' => $time, ':id' => $log_id, ':user_id' => $user_id]);
-    } else {
-        // INSERT new record
-        // **Error-proof logic**: Create a complete record to satisfy NOT NULL constraints.
-        // The other time field will be updated in a subsequent request.
-        $start_time = ($type === 'start') ? $time : '00:00:00';
-        $end_time = ($type === 'end') ? $time : '00:00:00';
+        // --- UPDATE ---
+        // Fetch the other part of the time to perform validation
+        $other_type = ($type === 'start') ? 'end_time' : 'start_time';
+        $stmt = $pdo->prepare("SELECT $other_type FROM time_logs WHERE id = ?");
+        $stmt->execute([$log_id]);
+        $other_time = $stmt->fetchColumn();
 
-        // To be even safer, if one time is set, set the other to the same time temporarily.
-        if ($type === 'start') {
-            $end_time = $time;
-        } else {
-            $start_time = $time;
+        $start_time = ($type === 'start') ? $time : $other_time;
+        $end_time = ($type === 'end') ? $time : $other_time;
+
+        // Validation: end_time must be after start_time
+        if ($start_time && $end_time && strtotime($end_time) <= strtotime($start_time)) {
+            throw new Exception('ساعت خروج باید بعد از ساعت ورود باشد.');
         }
 
+        // Validation: Check for overlaps
+        $overlap_stmt = $pdo->prepare(
+            "SELECT id FROM time_logs WHERE user_id = ? AND log_date = ? AND id != ? AND (
+                (? < end_time AND ? > start_time) OR
+                (? < end_time AND ? > start_time) OR
+                (? >= start_time AND ? <= end_time)
+            )"
+        );
+        $overlap_stmt->execute([$user_id, $log_date_gregorian, $log_id, $start_time, $start_time, $end_time, $end_time, $start_time, $end_time]);
+        if ($overlap_stmt->fetch()) {
+            throw new Exception('این بازه زمانی با یک بازه دیگر در این روز تداخل دارد.');
+        }
+
+        $column_to_update = ($type === 'start') ? 'start_time' : 'end_time';
+        $sql = "UPDATE time_logs SET $column_to_update = ? WHERE id = ? AND user_id = ?";
+        $pdo->prepare($sql)->execute([$time, $log_id, $user_id]);
+
+    } else {
+        // --- INSERT ---
+        $start_time = ($type === 'start') ? $time : null;
+        $end_time = ($type === 'end') ? $time : null;
+
         $sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day)
-                VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
+                VALUES (?, ?, ?, ?, 'work', ?, ?, ?)";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            'user_id' => $user_id,
-            'log_date' => $log_date_gregorian,
-            'start_time' => $start_time,
-            'end_time' => $end_time,
-            'jalali_year' => $jalali_year,
-            'jalali_month' => $jalali_month,
-            'jalali_day' => $jalali_day
-        ]);
+        $stmt->execute([$user_id, $log_date_gregorian, $start_time, $end_time, $jalali_year, $jalali_month, $jalali_day]);
         $new_log_id = $pdo->lastInsertId();
     }
 
@@ -86,6 +88,6 @@ try {
 } catch (Exception $e) {
     $pdo->rollBack();
     error_log('AJAX Save Time Error: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'A database error occurred.']);
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
 ?>
