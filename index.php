@@ -2,6 +2,7 @@
 require_once 'config.php';
 require_once 'JalaliDate.php';
 
+// Redirect if not logged in
 if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true){ header("location: login.php"); exit; }
 
 // If user is an admin, redirect them to the admin panel.
@@ -90,31 +91,36 @@ list($log_date_year, $log_date_month, $log_date_day) = explode('/', $log_date_ja
                             <option value="work" <?php if($selected_day_type == 'work') echo 'selected'; ?>>روز کاری عادی</option>
                             <option value="friday_work" <?php if($selected_day_type == 'friday_work') echo 'selected'; ?>>اضافه‌کار (کار در روز تعطیل/جمعه)</option>
                             <option value="leave" <?php if($selected_day_type == 'leave') echo 'selected'; ?>>مرخصی (با کسر از موجودی)</option>
-                            <option value="official_holiday" <?php if($selected_day_type == 'official_holiday') echo 'selected'; ?>>تعطیل رسمی (بدون کارکرد)</option>
+                            <option value="official_holiday" <?php if($selected_day_type == 'official_holiday') echo 'selected'; ?>>تعطیل رسمی (محاسبه به عنوان روز کاری کامل)</option>
                         </select>
-                        <div class="form-text">با انتخاب هر گزینه، محاسبات مربوط به حقوق و گزارش‌ها به صورت خودکار انجام خواهد شد.</div>
+                        <div class="form-text mt-2">
+                            <b>- روز کاری عادی:</b> برای روزهای معمول کاری. <br>
+                            <b>- اضافه‌کار:</b> برای کار در جمعه یا تعطیلات رسمی (ساعات شما به عنوان اضافه‌کار خالص ثبت می‌شود). <br>
+                            <b>- مرخصی:</b> برای روزی که از مرخصی استحقاقی استفاده کرده‌اید (یک روز از موجودی مرخصی شما کم می‌شود). <br>
+                            <b>- تعطیل رسمی:</b> برای تعطیلات رسمی تقویم (معادل یک روز کاری کامل برای شما محاسبه می‌شود).
+                        </div>
                     </div>
 
                     <!-- Time Intervals Section -->
                     <div class="mb-4 p-3 border rounded" id="time-intervals-section">
-                        <label class="form-label fw-bold">۳. ساعات کاری را وارد کنید</label>
+                        <label class="form-label fw-bold">۳. ساعات کاری را وارد کنید (فرمت ۲۴ ساعته)</label>
                         <div id="time-intervals-container">
                             <?php if (empty($work_logs)): ?>
                                 <div class="row g-2 mb-2 align-items-center time-interval-row">
-                                    <div class="col"><label class="form-label small">ساعت ورود</label><input type="time" class="form-control" name="start_time[]"></div>
-                                    <div class="col"><label class="form-label small">ساعت خروج</label><input type="time" class="form-control" name="end_time[]"></div>
+                                    <div class="col"><label class="form-label small">ساعت ورود</label><input type="text" class="form-control" name="start_time[]" pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$" placeholder="مثلا: 09:00" ></div>
+                                    <div class="col"><label class="form-label small">ساعت خروج</label><input type="text" class="form-control" name="end_time[]" pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$" placeholder="مثلا: 17:30"></div>
                                     <div class="col-auto d-flex align-items-end"><button type="button" class="btn btn-sm btn-danger remove-interval" style="display: none;">-</button></div>
                                 </div>
                             <?php else: foreach ($work_logs as $log): ?>
                                 <div class="row g-2 mb-2 align-items-center time-interval-row">
-                                    <div class="col"><label class="form-label small">ساعت ورود</label><input type="time" class="form-control" name="start_time[]" value="<?php echo htmlspecialchars($log['start']); ?>"></div>
-                                    <div class="col"><label class="form-label small">ساعت خروج</label><input type="time" class="form-control" name="end_time[]" value="<?php echo htmlspecialchars($log['end']); ?>"></div>
+                                    <div class="col"><label class="form-label small">ساعت ورود</label><input type="text" class="form-control" name="start_time[]" pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$" value="<?php echo htmlspecialchars($log['start']); ?>"></div>
+                                    <div class="col"><label class="form-label small">ساعت خروج</label><input type="text" class="form-control" name="end_time[]" pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$" value="<?php echo htmlspecialchars($log['end']); ?>"></div>
                                     <div class="col-auto d-flex align-items-end"><button type="button" class="btn btn-sm btn-danger remove-interval">-</button></div>
                                 </div>
                             <?php endforeach; endif; ?>
                         </div>
                         <button type="button" class="btn btn-outline-success mt-2" id="add-interval">افزودن بازه جدید +</button>
-                        <div class="form-text">اگر در طول روز چند بار ورود و خروج داشته‌اید، از این دکمه استفاده کنید. ساعت‌ها باید به فرمت ۲۴ ساعته باشند (مثلا ۱۴:۳۰).</div>
+                        <div class="form-text">اگر در طول روز چند بار ورود و خروج داشته‌اید، از این دکمه استفاده کنید.</div>
                     </div>
 
                     <hr>

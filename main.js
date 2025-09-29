@@ -41,8 +41,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const newRow = document.createElement('div');
             newRow.classList.add('row', 'g-2', 'mb-2', 'align-items-center', 'time-interval-row');
             newRow.innerHTML = `
-                <div class="col"><label class="form-label small">ساعت ورود</label><input type="time" class="form-control" name="start_time[]"></div>
-                <div class="col"><label class="form-label small">ساعت خروج</label><input type="time" class="form-control" name="end_time[]"></div>
+                <div class="col"><label class="form-label small">ساعت ورود</label><input type="text" class="form-control" name="start_time[]" pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$" placeholder="مثلا: 09:00"></div>
+                <div class="col"><label class="form-label small">ساعت خروج</label><input type="text" class="form-control" name="end_time[]" pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$" placeholder="مثلا: 17:30"></div>
                 <div class="col-auto d-flex align-items-end"><button type="button" class="btn btn-sm btn-danger remove-interval">-</button></div>
             `;
             timeContainer.appendChild(newRow);

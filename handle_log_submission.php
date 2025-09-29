@@ -56,14 +56,14 @@ try {
         ':day_type' => $day_type
     ]);
 
-    // 3. If it's a working day, insert the time intervals
+    // 3. If it's a working day ('work' or 'friday_work'), insert the time intervals
     if ($day_type === 'work' || $day_type === 'friday_work') {
         $sql_log = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
         $stmt_log = $pdo->prepare($sql_log);
 
         for ($i = 0; $i < count($start_times); $i++) {
             // Only insert if both start and end times are provided and valid
-            if (!empty($start_times[$i]) && !empty($end_times[$i])) {
+            if (!empty($start_times[$i]) && !empty($end_times[$i]) && preg_match("/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/", $start_times[$i]) && preg_match("/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/", $end_times[$i])) {
                 $stmt_log->execute([
                     ':user_id' => $user_id,
                     ':log_date' => $log_date_gregorian,

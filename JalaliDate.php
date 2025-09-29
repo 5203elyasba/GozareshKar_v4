@@ -57,6 +57,10 @@ class JalaliDate {
             }
         }
 
+        // Add 12 hours to the timestamp to ensure we are safely in the middle of the day,
+        // avoiding any potential timezone boundary issues that can occur at midnight.
+        $timestamp += 12 * 3600;
+
         $date = new DateTime();
         $date->setTimestamp($timestamp);
         $date->setTimezone(new DateTimeZone('Asia/Tehran'));
