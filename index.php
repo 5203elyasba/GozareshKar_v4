@@ -61,9 +61,9 @@ function generate_time_dropdowns($prefix, $log_id, $selectedValue = '') {
     for ($h = 0; $h <= 23; $h++) { $h_padded = str_pad($h, 2, '0', STR_PAD_LEFT); $selected = ($h_padded === $hour) ? 'selected' : ''; $hour_html .= "<option value='{$h_padded}' {$selected}>{$h_padded}</option>"; }
     $hour_html .= "</select>";
     $minute_html = "<select name='{$prefix}_minute' class='form-select time-select' data-type='{$prefix}' data-log-id='{$log_id}'><option value=''>-</option>";
-    for ($m = 0; $m <= 59; $m+=5) { $m_padded = str_pad($m, 2, '0', STR_PAD_LEFT); $selected = ($m_padded === $minute) ? 'selected' : ''; $minute_html .= "<option value='{$m_padded}' {$selected}>{$m_padded}</option>"; }
+    for ($m = 0; $m <= 59; $m++) { $m_padded = str_pad($m, 2, '0', STR_PAD_LEFT); $selected = ($m_padded === $minute) ? 'selected' : ''; $minute_html .= "<option value='{$m_padded}' {$selected}>{$m_padded}</option>"; }
     $minute_html .= "</select>";
-    return "<div class='input-group'>{$hour_html}{$minute_html}</div>";
+    return "<div class='input-group'><span class='input-group-text'>دقیقه</span>{$minute_html}<span class='input-group-text'>ساعت</span>{$hour_html}</div>";
 }
 ?>
 <!DOCTYPE html>

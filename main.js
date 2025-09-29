@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function generateSelectOptions(max, step = 1) {
-        let options = '<option value="">-</option>';
+        let options = '<option value="" selected>-</option>';
         for (let i = 0; i < max; i += step) {
             const padded = String(i).padStart(2, '0');
             options += `<option value="${padded}">${padded}</option>`;
@@ -35,23 +35,26 @@ document.addEventListener('DOMContentLoaded', function() {
         return options;
     }
 
-    function createTimeRow() {
-        const newRow = document.createElement('div');
-        newRow.className = 'row g-3 mb-2 align-items-center time-interval-row';
-        newRow.dataset.logId = '';
-        newRow.innerHTML = `
+    function createTimeRowHTML() {
+        const hourOptions = generateSelectOptions(24);
+        const minuteOptions = generateSelectOptions(60); // 0-59, step 1
+        return `
             <div class="col-12 col-md-5">
                 <label class="form-label small d-md-none">ورود</label>
                 <div class="input-group">
-                    <select name="start_hour" class="form-select time-select" data-type="start" data-log-id="">${generateSelectOptions(24)}</select>
-                    <select name="start_minute" class="form-select time-select" data-type="start" data-log-id="">${generateSelectOptions(60, 5)}</select>
+                    <span class="input-group-text">ساعت</span>
+                    <select name="start_hour" class="form-select time-select" data-type="start" data-log-id="">${hourOptions}</select>
+                    <span class="input-group-text">:</span>
+                    <select name="start_minute" class="form-select time-select" data-type="start" data-log-id="">${minuteOptions}</select>
                 </div>
             </div>
             <div class="col-12 col-md-5">
                 <label class="form-label small d-md-none">خروج</label>
                 <div class="input-group">
-                    <select name="end_hour" class="form-select time-select" data-type="end" data-log-id="">${generateSelectOptions(24)}</select>
-                    <select name="end_minute" class="form-select time-select" data-type="end" data-log-id="">${generateSelectOptions(60, 5)}</select>
+                    <span class="input-group-text">ساعت</span>
+                    <select name="end_hour" class="form-select time-select" data-type="end" data-log-id="">${hourOptions}</select>
+                    <span class="input-group-text">:</span>
+                    <select name="end_minute" class="form-select time-select" data-type="end" data-log-id="">${minuteOptions}</select>
                 </div>
             </div>
             <div class="col-12 col-md-2 d-flex justify-content-end align-items-center">
@@ -59,7 +62,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button type="button" class="btn btn-sm btn-danger remove-interval">-</button>
             </div>
         `;
-        return newRow;
     }
 
     function toggleTimeSection() {
@@ -73,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const rows = timeContainer.querySelectorAll('.time-interval-row');
         rows.forEach(row => {
             const removeBtn = row.querySelector('.remove-interval');
-            if (removeBtn) removeBtn.style.display = rows.length > 0 ? 'inline-block' : 'none';
+            if (removeBtn) removeBtn.style.display = 'inline-block';
         });
         if (rows.length <= 1) {
             const firstRemoveBtn = timeContainer.querySelector('.remove-interval');
@@ -89,8 +91,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const row = e.target.closest('.time-interval-row');
         const statusIcon = row.querySelector('.status-icon');
 
-        const hourSelect = row.querySelector(`[name="${e.target.dataset.type}_hour"]`);
-        const minuteSelect = row.querySelector(`[name="${e.target.dataset.type}_minute"]`);
+        const hourSelect = row.querySelector(`select[name="${e.target.dataset.type}_hour"]`);
+        const minuteSelect = row.querySelector(`select[name="${e.target.dataset.type}_minute"]`);
 
         if (hourSelect.value && minuteSelect.value) {
             const timeToSave = `${hourSelect.value}:${minuteSelect.value}`;
@@ -133,13 +135,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 setStatus(dayTypeStatus, 'success');
                 toggleTimeSection();
-                if (!['work', 'friday_work', 'official_holiday_work'].includes(this.value)) {
-                    timeContainer.innerHTML = '';
-                    updateRemoveButtons();
-                } else if (timeContainer.children.length === 0) {
-                     timeContainer.appendChild(createTimeRow());
-                     updateRemoveButtons();
-                }
+                // Reload to reflect changes server-side, especially clearing time logs
+                window.location.reload();
             } else {
                 setStatus(dayTypeStatus, 'error', data.message);
             }
@@ -148,7 +145,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     addIntervalBtn.addEventListener('click', function() {
-        timeContainer.appendChild(createTimeRow());
+        const newRow = document.createElement('div');
+        newRow.className = 'row g-3 mb-2 align-items-center time-interval-row';
+        newRow.dataset.logId = '';
+        newRow.innerHTML = createTimeRowHTML();
+        timeContainer.appendChild(newRow);
         updateRemoveButtons();
     });
 

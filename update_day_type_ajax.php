@@ -33,19 +33,21 @@ $log_date_gregorian = $gregorian_date_obj->format('Y-m-d');
 try {
     $pdo->beginTransaction();
 
-    // 1. Clean up previous state for the given day
+    // 1. Clean up previous state for the given day from all relevant tables
     $pdo->prepare("DELETE FROM day_properties WHERE user_id = :user_id AND log_date = :log_date")->execute([':user_id' => $user_id, ':log_date' => $log_date_gregorian]);
     $pdo->prepare("DELETE FROM leave_logs WHERE user_id = :user_id AND leave_date = :log_date")->execute([':user_id' => $user_id, ':log_date' => $log_date_gregorian]);
 
-    // 2. Insert new state based on day_type
+    // 2. Insert new state based on day_type, respecting the database schema
     switch ($day_type) {
         case 'leave':
-            $stmt = $pdo->prepare("INSERT INTO leave_logs (user_id, leave_date, reason) VALUES (:user_id, :leave_date, :reason)");
-            $stmt->execute([':user_id' => $user_id, ':leave_date' => $log_date_gregorian, ':reason' => '']);
+            $stmt = $pdo->prepare("INSERT INTO leave_logs (user_id, leave_date) VALUES (:user_id, :leave_date)");
+            $stmt->execute([':user_id' => $user_id, ':leave_date' => $log_date_gregorian]);
             break;
 
         case 'official_holiday_no_work':
         case 'official_holiday_work':
+            // Both types are stored as 'official_holiday' in the DB.
+            // The distinction is made by the presence/absence of time_logs.
             $stmt = $pdo->prepare("INSERT INTO day_properties (user_id, log_date, day_type, status) VALUES (:user_id, :log_date, 'official_holiday', 'approved')");
             $stmt->execute([':user_id' => $user_id, ':log_date' => $log_date_gregorian]);
             break;
@@ -55,7 +57,7 @@ try {
             $stmt->execute([':user_id' => $user_id, ':log_date' => $log_date_gregorian]);
             break;
 
-        // For 'work' and 'friday', we just need the cleanup. No new record is needed in properties/leave tables.
+        // For 'work' and 'friday', we just need the cleanup. No new record is needed.
     }
 
     // 3. If the day is set to a non-working type, remove any associated time logs.
