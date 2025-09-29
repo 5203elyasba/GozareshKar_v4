@@ -13,32 +13,41 @@ $gregorian_date_obj = JalaliDate::fromJalaliToDateTime($log_date_jalali);
 $gregorian_date_str = $gregorian_date_obj ? $gregorian_date_obj->format('Y-m-d') : '';
 
 $work_logs = [];
-$day_property = null;
 $selected_day_type = 'work'; // Default
 
 if ($gregorian_date_str) {
-    // Fetch day properties
+    // Fetch data from all relevant tables to determine the day's state
+    $leave_sql = "SELECT id FROM leave_logs WHERE user_id = :user_id AND leave_date = :log_date";
+    $leave_stmt = $pdo->prepare($leave_sql);
+    $leave_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
+    $is_leave_day = $leave_stmt->fetch();
+
     $prop_sql = "SELECT day_type FROM day_properties WHERE user_id = :user_id AND log_date = :log_date";
     $prop_stmt = $pdo->prepare($prop_sql);
     $prop_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
-    if ($prop = $prop_stmt->fetch(PDO::FETCH_ASSOC)) {
-        $selected_day_type = $prop['day_type'];
-    } else {
-        // If no property, determine if it's a Friday by default
-        $is_friday = ($gregorian_date_obj->format('N') == 5);
-        $selected_day_type = $is_friday ? 'friday' : 'work';
-    }
+    $day_property = $prop_stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Fetch work logs
-    $sql = "SELECT id, start_time, end_time FROM time_logs WHERE user_id = :user_id AND log_date = :log_date ORDER BY start_time ASC";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $log) {
-        $work_logs[] = [
-            'id' => $log['id'],
-            'start' => $log['start_time'] ? date('H:i', strtotime($log['start_time'])) : '',
-            'end' => $log['end_time'] ? date('H:i', strtotime($log['end_time'])) : ''
-        ];
+    $time_sql = "SELECT id, start_time, end_time FROM time_logs WHERE user_id = :user_id AND log_date = :log_date ORDER BY start_time ASC";
+    $time_stmt = $pdo->prepare($time_sql);
+    $time_stmt->execute([':user_id' => $user_id, ':log_date' => $gregorian_date_str]);
+    $work_logs = $time_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Determine the selected_day_type based on the fetched data
+    if ($is_leave_day) {
+        $selected_day_type = 'leave';
+    } elseif ($day_property) {
+        if ($day_property['day_type'] === 'official_holiday') {
+            $selected_day_type = !empty($work_logs) ? 'official_holiday_work' : 'official_holiday_no_work';
+        } elseif ($day_property['day_type'] === 'friday_work') {
+            $selected_day_type = 'friday_work';
+        }
+    } else {
+        $is_friday = ($gregorian_date_obj->format('N') == 5);
+        if ($is_friday) {
+            $selected_day_type = !empty($work_logs) ? 'friday_work' : 'friday';
+        } else {
+            $selected_day_type = 'work';
+        }
     }
 }
 
@@ -46,28 +55,14 @@ list($log_date_year, $log_date_month, $log_date_day) = explode('/', $log_date_ja
 
 // Helper function to generate time dropdowns
 function generate_time_dropdowns($prefix, $log_id, $selectedValue = '') {
-    $hour = '';
-    $minute = '';
-    if ($selectedValue && strpos($selectedValue, ':') !== false) {
-        list($hour, $minute) = explode(':', $selectedValue);
-    }
-
+    $hour = ''; $minute = '';
+    if ($selectedValue && strpos($selectedValue, ':') !== false) { list($hour, $minute) = explode(':', $selectedValue); }
     $hour_html = "<select name='{$prefix}_hour' class='form-select time-select' data-type='{$prefix}' data-log-id='{$log_id}'><option value=''>-</option>";
-    for ($h = 0; $h <= 23; $h++) {
-        $h_padded = str_pad($h, 2, '0', STR_PAD_LEFT);
-        $selected = ($h_padded === $hour) ? 'selected' : '';
-        $hour_html .= "<option value='{$h_padded}' {$selected}>{$h_padded}</option>";
-    }
+    for ($h = 0; $h <= 23; $h++) { $h_padded = str_pad($h, 2, '0', STR_PAD_LEFT); $selected = ($h_padded === $hour) ? 'selected' : ''; $hour_html .= "<option value='{$h_padded}' {$selected}>{$h_padded}</option>"; }
     $hour_html .= "</select>";
-
     $minute_html = "<select name='{$prefix}_minute' class='form-select time-select' data-type='{$prefix}' data-log-id='{$log_id}'><option value=''>-</option>";
-    for ($m = 0; $m <= 59; $m+=5) { // 5-minute increments
-        $m_padded = str_pad($m, 2, '0', STR_PAD_LEFT);
-        $selected = ($m_padded === $minute) ? 'selected' : '';
-        $minute_html .= "<option value='{$m_padded}' {$selected}>{$m_padded}</option>";
-    }
+    for ($m = 0; $m <= 59; $m+=5) { $m_padded = str_pad($m, 2, '0', STR_PAD_LEFT); $selected = ($m_padded === $minute) ? 'selected' : ''; $minute_html .= "<option value='{$m_padded}' {$selected}>{$m_padded}</option>"; }
     $minute_html .= "</select>";
-
     return "<div class='input-group'>{$hour_html}{$minute_html}</div>";
 }
 ?>
@@ -89,7 +84,6 @@ function generate_time_dropdowns($prefix, $log_id, $selectedValue = '') {
             <div class="card-body">
                 <form id="log-form" data-jalali-date="<?php echo htmlspecialchars($log_date_jalali); ?>">
 
-                    <!-- Date Selection -->
                     <div class="mb-4 p-3 border rounded bg-light">
                         <label class="form-label fw-bold">۱. انتخاب تاریخ</label>
                         <div class="row g-2 align-items-center">
@@ -100,7 +94,6 @@ function generate_time_dropdowns($prefix, $log_id, $selectedValue = '') {
                         </div>
                     </div>
 
-                    <!-- Day Type Selection -->
                     <div class="mb-4 p-3 border rounded">
                         <label for="day_type" class="form-label fw-bold">۲. تعیین نوع روز <span class="status-icon" id="day-type-status"></span></label>
                         <select class="form-select" id="day_type">
@@ -113,33 +106,22 @@ function generate_time_dropdowns($prefix, $log_id, $selectedValue = '') {
                         </select>
                     </div>
 
-                    <!-- Time Intervals Section -->
                     <div class="mb-4 p-3 border rounded" id="time-intervals-section">
                         <label class="form-label fw-bold">۳. انتخاب ساعات کاری</label>
                         <div id="time-intervals-container">
-                            <?php if (empty($work_logs)): ?>
-                                <div class="row g-3 mb-2 align-items-center time-interval-row" data-log-id="">
-                                    <div class="col-12 col-md-5"><label class="form-label small d-md-none">ورود</label><?php echo generate_time_dropdowns('start', ''); ?></div>
-                                    <div class="col-12 col-md-5"><label class="form-label small d-md-none">خروج</label><?php echo generate_time_dropdowns('end', ''); ?></div>
-                                    <div class="col-12 col-md-2 d-flex justify-content-end align-items-center">
-                                        <span class="status-icon me-2"></span>
-                                        <button type="button" class="btn btn-sm btn-danger remove-interval" style="display: none;">-</button>
-                                    </div>
-                                </div>
-                            <?php else: foreach ($work_logs as $log): ?>
+                            <?php foreach ($work_logs as $log): ?>
                                 <div class="row g-3 mb-2 align-items-center time-interval-row" data-log-id="<?php echo $log['id']; ?>">
-                                    <div class="col-12 col-md-5"><label class="form-label small d-md-none">ورود</label><?php echo generate_time_dropdowns('start', $log['id'], $log['start']); ?></div>
-                                    <div class="col-12 col-md-5"><label class="form-label small d-md-none">خروج</label><?php echo generate_time_dropdowns('end', $log['id'], $log['end']); ?></div>
+                                    <div class="col-12 col-md-5"><label class="form-label small d-md-none">ورود</label><?php echo generate_time_dropdowns('start', $log['id'], date('H:i', strtotime($log['start_time']))); ?></div>
+                                    <div class="col-12 col-md-5"><label class="form-label small d-md-none">خروج</label><?php echo generate_time_dropdowns('end', $log['id'], date('H:i', strtotime($log['end_time']))); ?></div>
                                     <div class="col-12 col-md-2 d-flex justify-content-end align-items-center">
                                         <span class="status-icon me-2"></span>
                                         <button type="button" class="btn btn-sm btn-danger remove-interval">-</button>
                                     </div>
                                 </div>
-                            <?php endforeach; endif; ?>
+                            <?php endforeach; ?>
                         </div>
                         <button type="button" class="btn btn-outline-success mt-2" id="add-interval">افزودن بازه جدید +</button>
                     </div>
-
                 </form>
             </div>
         </div>

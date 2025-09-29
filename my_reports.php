@@ -38,12 +38,12 @@ try {
     $daily_goal = $user_data['daily_hours_goal'] ?? 8;
     $annual_leave_days = $user_data['annual_leave_days'] ?? 26;
 
-    // 2. Fetch all necessary data for the selected month
+    // 2. Fetch all necessary data for the selected month from all relevant tables
     $first_day_gregorian_str = JalaliDate::fromJalaliToDateTime("$selected_year/$selected_month/01")->format('Y-m-d');
     $days_in_month = JalaliDate::daysInMonth((int)$selected_year, (int)$selected_month);
     $last_day_gregorian_str = JalaliDate::fromJalaliToDateTime("$selected_year/$selected_month/$days_in_month")->format('Y-m-d');
 
-    // Fetch all day properties for the month
+    // Fetch day properties (official holidays, friday work)
     $properties_by_date = [];
     $prop_sql = "SELECT log_date, day_type FROM day_properties WHERE user_id = :user_id AND log_date BETWEEN :start_date AND :end_date";
     $prop_stmt = $pdo->prepare($prop_sql);
@@ -52,7 +52,16 @@ try {
         $properties_by_date[$row['log_date']] = $row['day_type'];
     }
 
-    // Fetch all time logs for the month
+    // Fetch leave logs
+    $leave_by_date = [];
+    $leave_sql = "SELECT leave_date FROM leave_logs WHERE user_id = :user_id AND leave_date BETWEEN :start_date AND :end_date";
+    $leave_stmt = $pdo->prepare($leave_sql);
+    $leave_stmt->execute([':user_id' => $user_id, ':start_date' => $first_day_gregorian_str, ':end_date' => $last_day_gregorian_str]);
+    while ($row = $leave_stmt->fetch(PDO::FETCH_ASSOC)) {
+        $leave_by_date[$row['leave_date']] = true;
+    }
+
+    // Fetch time logs
     $time_logs_by_date = [];
     $log_sql = "SELECT log_date, start_time, end_time FROM time_logs WHERE user_id = :user_id AND log_date BETWEEN :start_date AND :end_date ORDER BY start_time ASC";
     $log_stmt = $pdo->prepare($log_sql);
@@ -71,20 +80,28 @@ try {
         $gregorian_date_str = $gregorian_date_obj->format('Y-m-d');
         $is_friday = ($gregorian_date_obj->format('N') == 5);
 
-        // Determine the final day type
-        $day_type = $properties_by_date[$gregorian_date_str] ?? ($is_friday ? 'friday' : 'work');
+        // Determine the final, definitive day type based on hierarchy
+        $day_type = 'work'; // Default
+        if (isset($leave_by_date[$gregorian_date_str])) {
+            $day_type = 'leave';
+        } elseif (isset($properties_by_date[$gregorian_date_str])) {
+            $prop_type = $properties_by_date[$gregorian_date_str];
+            if ($prop_type === 'official_holiday') {
+                $day_type = isset($time_logs_by_date[$gregorian_date_str]) ? 'official_holiday_work' : 'official_holiday_no_work';
+            } elseif ($prop_type === 'friday_work') {
+                $day_type = 'friday_work';
+            }
+        } elseif ($is_friday) {
+            $day_type = 'friday';
+        }
 
         $logs_by_day[$d] = ['work_hours' => 0, 'entries' => [], 'day_type' => $day_type];
 
         // Process based on day type for summary calculations
-        if ($day_type === 'work' && !$is_friday) {
+        if ($day_type === 'work') {
             $workdays_in_month++;
-        } elseif ($day_type === 'official_holiday_no_work') {
+        } elseif ($day_type === 'official_holiday_no_work' || $day_type === 'official_holiday_work') {
             $holiday_credit_hours += $daily_goal;
-        } elseif ($day_type === 'official_holiday_work') {
-            // Credit for the holiday itself
-            $holiday_credit_hours += $daily_goal;
-            // The actual hours worked will be counted as overtime below
         }
 
         // Calculate actual worked hours if any time logs exist
@@ -106,7 +123,7 @@ try {
     }
 
     // 4. Calculate final summary values
-    $total_leave_stmt = $pdo->prepare("SELECT COUNT(*) FROM day_properties WHERE user_id = :user_id AND day_type = 'leave'");
+    $total_leave_stmt = $pdo->prepare("SELECT COUNT(*) FROM leave_logs WHERE user_id = :user_id");
     $total_leave_stmt->execute(['user_id' => $user_id]);
     $summary['remaining_leave_days'] = $annual_leave_days - $total_leave_stmt->fetchColumn();
 
@@ -177,7 +194,7 @@ $jalali_months = ["فروردین","اردیبهشت","خرداد","تیر","م�
             </div>
         </form>
 
-        <?php if (empty($properties_by_date) && empty($time_logs_by_date)): ?>
+        <?php if (empty($properties_by_date) && empty($time_logs_by_date) && empty($leave_by_date)): ?>
             <div class="alert alert-info">هیچ گزارشی برای این ماه ثبت نشده است.</div>
         <?php else: ?>
             <div class="row text-center mb-4">

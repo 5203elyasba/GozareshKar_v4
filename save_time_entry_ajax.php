@@ -53,8 +53,6 @@ try {
         $stmt->execute([':time' => $time, ':id' => $log_id, ':user_id' => $user_id]);
     } else {
         // INSERT new record
-        // When a new entry is created, we only have one part of the time (start or end)
-        // The other will be updated in a subsequent request.
         $start_time = ($type === 'start') ? $time : null;
         $end_time = ($type === 'end') ? $time : null;
 
