@@ -36,69 +36,92 @@ try {
     $user_stmt->execute(['id' => $user_id]);
     $user_data = $user_stmt->fetch(PDO::FETCH_ASSOC);
     $daily_goal = $user_data['daily_hours_goal'] ?? 8;
+    $annual_leave_days = $user_data['annual_leave_days'] ?? 26;
 
-    $leave_sql = "SELECT COUNT(*) FROM leave_logs WHERE user_id = :user_id";
+    // Calculate used leave days based on the new system
+    $leave_sql = "SELECT COUNT(*) FROM day_properties WHERE user_id = :user_id AND day_type = 'leave' AND status = 'approved'";
     $leave_stmt = $pdo->prepare($leave_sql);
     $leave_stmt->execute(['user_id' => $user_id]);
     $total_leave_days = $leave_stmt->fetchColumn();
-    $summary['remaining_leave_days'] = ($user_data['annual_leave_days'] ?? 26) - $total_leave_days;
+    $summary['remaining_leave_days'] = $annual_leave_days - $total_leave_days;
 
-    // 2. Fetch all time logs and day properties for the selected month
-    $sql = "SELECT tl.*, dp.day_type FROM time_logs tl LEFT JOIN day_properties dp ON tl.log_date = dp.log_date AND tl.user_id = dp.user_id WHERE tl.user_id = :user_id AND tl.jalali_year = :year AND tl.jalali_month = :month ORDER BY tl.log_date ASC, tl.start_time ASC";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute(['user_id' => $user_id, 'year' => $selected_year, 'month' => $selected_month]);
-    $all_logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    // 3. Fetch approved holidays for the month
-    $first_day_gregorian = JalaliDate::fromJalaliToDateTime("$selected_year/$selected_month/01")->format('Y-m-d');
-    $holiday_sql = "SELECT COUNT(*) FROM day_properties WHERE user_id = :user_id AND day_type = 'official_holiday' AND status = 'approved' AND YEAR(log_date) = YEAR(:date) AND MONTH(log_date) = MONTH(:date)";
-    $holiday_stmt = $pdo->prepare($holiday_sql);
-    $holiday_stmt->execute(['user_id' => $user_id, 'date' => $first_day_gregorian]);
-    $approved_holidays_count = $holiday_stmt->fetchColumn();
-    $summary['holiday_credit_hours'] = $approved_holidays_count * $daily_goal;
-
-
-    // 4. Calculate Required Work Hours for the month
+    // 2. Define date range for the selected month
+    $first_day_gregorian_str = JalaliDate::fromJalaliToDateTime("$selected_year/$selected_month/01")->format('Y-m-d');
     $days_in_month = JalaliDate::daysInMonth($selected_year, $selected_month);
+    $last_day_gregorian_str = JalaliDate::fromJalaliToDateTime("$selected_year/$selected_month/$days_in_month")->format('Y-m-d');
+
+    // 3. Fetch all data for the month in two separate queries
+    $properties_by_date = [];
+    $prop_sql = "SELECT log_date, day_type FROM day_properties WHERE user_id = :user_id AND log_date BETWEEN :start_date AND :end_date";
+    $prop_stmt = $pdo->prepare($prop_sql);
+    $prop_stmt->execute([':user_id' => $user_id, ':start_date' => $first_day_gregorian_str, ':end_date' => $last_day_gregorian_str]);
+    while ($row = $prop_stmt->fetch(PDO::FETCH_ASSOC)) {
+        $properties_by_date[$row['log_date']] = $row['day_type'];
+    }
+
+    $time_logs_by_date = [];
+    $log_sql = "SELECT log_date, start_time, end_time, jalali_day FROM time_logs WHERE user_id = :user_id AND log_date BETWEEN :start_date AND :end_date ORDER BY start_time ASC";
+    $log_stmt = $pdo->prepare($log_sql);
+    $log_stmt->execute([':user_id' => $user_id, ':start_date' => $first_day_gregorian_str, ':end_date' => $last_day_gregorian_str]);
+    while ($row = $log_stmt->fetch(PDO::FETCH_ASSOC)) {
+        if (!isset($time_logs_by_date[$row['log_date']])) {
+            $time_logs_by_date[$row['log_date']] = [];
+        }
+        $time_logs_by_date[$row['log_date']][] = $row;
+    }
+
+    // 4. Process all days of the month and build the report
+    $approved_holidays_count = 0;
     $fridays_in_month = 0;
+
     for ($d = 1; $d <= $days_in_month; $d++) {
-        $gregorian_date = JalaliDate::fromJalaliToDateTime("$selected_year/$selected_month/$d")->format('Y-m-d');
-        if (date('N', strtotime($gregorian_date)) == 5) { // 5 is Friday in PHP's date('N')
-            $fridays_in_month++;
+        $jalali_date_str = "$selected_year/$selected_month/$d";
+        $gregorian_date_obj = JalaliDate::fromJalaliToDateTime($jalali_date_str);
+        $gregorian_date_str = $gregorian_date_obj->format('Y-m-d');
+        $day_of_week = $gregorian_date_obj->format('N');
+
+        $day_type = $properties_by_date[$gregorian_date_str] ?? 'work';
+        $is_friday = ($day_of_week == 5);
+        if ($is_friday) $fridays_in_month++;
+
+        // Initialize log for the day
+        $logs_by_day[$d] = [
+            'work_hours' => 0,
+            'entries' => [],
+            'day_type' => $day_type,
+            'is_friday' => $is_friday,
+            'gregorian_date' => $gregorian_date_str
+        ];
+
+        if ($day_type === 'official_holiday' && !$is_friday) {
+             $approved_holidays_count++;
+        }
+
+        // Calculate work hours if there are time logs
+        if (isset($time_logs_by_date[$gregorian_date_str])) {
+            $daily_total_seconds = 0;
+            foreach ($time_logs_by_date[$gregorian_date_str] as $log) {
+                $start = new DateTime($log['start_time']);
+                $end = new DateTime($log['end_time']);
+                $diff_seconds = $end->getTimestamp() - $start->getTimestamp();
+                $daily_total_seconds += $diff_seconds;
+                $logs_by_day[$d]['entries'][] = $start->format('H:i') . ' - ' . $end->format('H:i');
+            }
+            $daily_hours = $daily_total_seconds / 3600;
+            $logs_by_day[$d]['work_hours'] = $daily_hours;
+
+            if ($day_type === 'friday_work') {
+                $summary['monthly_overtime_hours'] += $daily_hours;
+            } else {
+                $summary['monthly_total_hours'] += $daily_hours;
+            }
         }
     }
-    // Required workdays are non-Friday days, MINUS any official holidays that fall on a workday
+
+    // 5. Calculate final summary
+    $summary['holiday_credit_hours'] = $approved_holidays_count * $daily_goal;
     $required_workdays = $days_in_month - $fridays_in_month - $approved_holidays_count;
     $summary['required_work_hours'] = $required_workdays * $daily_goal;
-
-    // 5. Process all logs
-    foreach ($all_logs as $log) {
-        $day = $log['jalali_day'];
-        if (!isset($logs_by_day[$day])) {
-            $logs_by_day[$day] = ['work_hours' => 0, 'break_minutes' => 0, 'entries' => [], 'day_type' => $log['day_type']];
-        }
-
-        $start = new DateTime($log['start_time']);
-        $end = new DateTime($log['end_time']);
-        $diff_seconds = $end->getTimestamp() - $start->getTimestamp();
-
-        if ($log['log_type'] === 'work') {
-            $work_hours = $diff_seconds / 3600;
-            if ($log['day_type'] === 'friday_work') {
-                $summary['monthly_overtime_hours'] += $work_hours;
-            } else {
-                 $summary['monthly_total_hours'] += $work_hours;
-            }
-            $logs_by_day[$day]['work_hours'] += $work_hours;
-            $logs_by_day[$day]['entries'][] = date('H:i', $start->getTimestamp()) . ' - ' . date('H:i', $end->getTimestamp());
-        } else {
-            $break_minutes = $diff_seconds / 60;
-            $summary['monthly_break_minutes'] += $break_minutes;
-            $logs_by_day[$day]['break_minutes'] += $break_minutes;
-        }
-    }
-
-    // 5. Calculate final deficit/surplus
     $summary['deficit_surplus_hours'] = ($summary['monthly_total_hours'] + $summary['holiday_credit_hours']) - $summary['required_work_hours'];
 
     ksort($logs_by_day);
@@ -164,7 +187,7 @@ $jalali_months = ["فروردین","اردیبهشت","خرداد","تیر","م�
             </div>
         </form>
 
-        <?php if (empty($all_logs)): ?>
+        <?php if (empty($properties_by_date) && empty($time_logs_by_date)): ?>
             <div class="alert alert-info">هیچ گزارشی برای این ماه ثبت نشده است.</div>
         <?php else: ?>
             <div class="row text-center mb-4">
@@ -212,22 +235,39 @@ $jalali_months = ["فروردین","اردیبهشت","خرداد","تیر","م�
                     <div class="accordion-item">
                         <h2 class="accordion-header">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<?php echo $day; ?>">
-                                <div class="w-100 d-flex justify-content-between pe-3">
+                                <div class="w-100 d-flex justify-content-between pe-3 align-items-center">
                                     <strong><?php echo "{$selected_year}/{$selected_month}/{$day}"; ?></strong>
-                                    <?php if($data['day_type'] === 'official_holiday'): ?><span class="badge bg-info">تعطیل رسمی</span><?php endif; ?>
-                                    <?php if($data['day_type'] === 'friday_work'): ?><span class="badge bg-warning">اضافه‌کار</span><?php endif; ?>
-                                    <span>مجموع ساعت کاری: <?php echo round($data['work_hours'], 2); ?></span>
+                                    <div>
+                                        <?php if($data['day_type'] === 'leave'): ?><span class="badge bg-secondary">مرخصی</span><?php endif; ?>
+                                        <?php if($data['day_type'] === 'official_holiday'): ?><span class="badge bg-info">تعطیل رسمی</span><?php endif; ?>
+                                        <?php if($data['day_type'] === 'friday_work'): ?><span class="badge bg-warning">اضافه‌کار</span><?php endif; ?>
+                                        <?php if($data['is_friday'] && $data['day_type'] !== 'friday_work' && $data['day_type'] !== 'official_holiday'): ?><span class="badge bg-light text-dark">جمعه</span><?php endif; ?>
+                                    </div>
+                                    <?php if($data['day_type'] === 'work' || $data['day_type'] === 'friday_work'): ?>
+                                        <span>مجموع: <?php echo round($data['work_hours'], 2); ?> ساعت</span>
+                                    <?php else: ?>
+                                        <span></span> <!-- Empty span for alignment -->
+                                    <?php endif; ?>
                                 </div>
                             </button>
                         </h2>
                         <div id="collapse-<?php echo $day; ?>" class="accordion-collapse collapse" data-bs-parent="#reports-accordion">
                             <div class="accordion-body">
-                                <h6>بازه های زمانی حضور:</h6>
-                                <ul>
-                                    <?php foreach($data['entries'] as $entry): ?>
-                                        <li><?php echo $entry; ?></li>
-                                    <?php endforeach; ?>
-                                </ul>
+                                <?php if (!empty($data['entries'])): ?>
+                                    <h6>بازه های زمانی حضور:</h6>
+                                    <ul>
+                                        <?php foreach($data['entries'] as $entry): ?>
+                                            <li><?php echo $entry; ?></li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php else:
+                                    $message = 'برای این روز ساعت کاری ثبت نشده است.';
+                                    if ($data['day_type'] === 'leave') $message = 'این روز به عنوان مرخصی ثبت شده است.';
+                                    if ($data['day_type'] === 'official_holiday') $message = 'این روز به عنوان تعطیل رسمی ثبت شده است.';
+                                    if ($data['is_friday'] && $data['day_type'] !== 'friday_work') $message = 'روز جمعه (تعطیل).';
+                                ?>
+                                    <p class="text-muted"><?php echo $message; ?></p>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
