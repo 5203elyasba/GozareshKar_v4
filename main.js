@@ -5,12 +5,52 @@ document.addEventListener('DOMContentLoaded', function() {
     const timeContainer = document.getElementById('time-intervals-container');
     const fetchDateBtn = document.getElementById('fetch-date-btn');
 
+    // Function to generate the HTML for a new time entry row
+    function createTimeRow() {
+        const newRow = document.createElement('div');
+        newRow.classList.add('row', 'g-2', 'mb-2', 'align-items-center', 'time-interval-row');
+
+        let hourOptions = '<option value="">ساعت</option>';
+        for (let h = 0; h <= 23; h++) {
+            const h_padded = String(h).padStart(2, '0');
+            hourOptions += `<option value="${h_padded}">${h_padded}</option>`;
+        }
+
+        let minuteOptions = '<option value="">دقیقه</option>';
+        for (let m = 0; m <= 59; m++) {
+            const m_padded = String(m).padStart(2, '0');
+            minuteOptions += `<option value="${m_padded}">${m_padded}</option>`;
+        }
+
+        newRow.innerHTML = `
+            <div class="col-5">
+                <label class="form-label small">ساعت ورود</label>
+                <div class="input-group">
+                    <select name="start_hour[]" class="form-select">${hourOptions}</select>
+                    <select name="start_minute[]" class="form-select">${minuteOptions}</select>
+                </div>
+            </div>
+            <div class="col-5">
+                <label class="form-label small">ساعت خروج</label>
+                <div class="input-group">
+                    <select name="end_hour[]" class="form-select">${hourOptions}</select>
+                    <select name="end_minute[]" class="form-select">${minuteOptions}</select>
+                </div>
+            </div>
+            <div class="col-auto d-flex align-items-end">
+                <button type="button" class="btn btn-sm btn-danger remove-interval">-</button>
+            </div>
+        `;
+        return newRow;
+    }
+
     // Function to show or hide the time entry section based on the selected day type
     function toggleTimeSection() {
         if (!dayTypeSelect || !timeIntervalsSection) return;
         const selectedType = dayTypeSelect.value;
-        // Show for 'work' and 'friday_work', hide for others ('leave', 'official_holiday')
-        if (selectedType === 'work' || selectedType === 'friday_work') {
+        const workDayTypes = ['work', 'friday_work', 'official_holiday_work'];
+
+        if (workDayTypes.includes(selectedType)) {
             timeIntervalsSection.style.display = 'block';
         } else {
             timeIntervalsSection.style.display = 'none';
@@ -24,33 +64,23 @@ document.addEventListener('DOMContentLoaded', function() {
         rows.forEach(row => {
             const removeBtn = row.querySelector('.remove-interval');
             if (removeBtn) {
-                // Show remove button only if there is more than one row
                 removeBtn.style.display = (rows.length > 1) ? 'inline-block' : 'none';
             }
         });
     }
 
-    // Event listener for the day type dropdown
+    // --- Event Listeners ---
     if (dayTypeSelect) {
         dayTypeSelect.addEventListener('change', toggleTimeSection);
     }
 
-    // Event listener for the "add interval" button
     if (addIntervalBtn) {
         addIntervalBtn.addEventListener('click', () => {
-            const newRow = document.createElement('div');
-            newRow.classList.add('row', 'g-2', 'mb-2', 'align-items-center', 'time-interval-row');
-            newRow.innerHTML = `
-                <div class="col"><label class="form-label small">ساعت ورود</label><input type="text" class="form-control" name="start_time[]" pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$" placeholder="مثلا: 09:00"></div>
-                <div class="col"><label class="form-label small">ساعت خروج</label><input type="text" class="form-control" name="end_time[]" pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$" placeholder="مثلا: 17:30"></div>
-                <div class="col-auto d-flex align-items-end"><button type="button" class="btn btn-sm btn-danger remove-interval">-</button></div>
-            `;
-            timeContainer.appendChild(newRow);
+            timeContainer.appendChild(createTimeRow());
             updateRemoveButtons();
         });
     }
 
-    // Event listener for removing an interval (delegated to the container)
     if (timeContainer) {
         timeContainer.addEventListener('click', e => {
             if (e.target && e.target.classList.contains('remove-interval')) {
@@ -60,24 +90,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Event listener for the "Fetch Date" button
     if (fetchDateBtn) {
         fetchDateBtn.addEventListener('click', () => {
-            const yearInput = document.querySelector('input[name="log_year"]');
-            const monthInput = document.querySelector('select[name="log_month"]');
-            const dayInput = document.querySelector('input[name="log_day"]');
-
-            if (yearInput && monthInput && dayInput) {
-                const year = yearInput.value;
-                const month = String(monthInput.value).padStart(2, '0');
-                const day = String(dayInput.value).padStart(2, '0');
-                // Redirect to the same page with the new date as a query parameter
-                window.location.href = 'index.php?date=' + year + '/' + month + '/' + day;
-            }
+            const year = document.querySelector('input[name="log_year"]').value;
+            const month = String(document.querySelector('select[name="log_month"]').value).padStart(2, '0');
+            const day = String(document.querySelector('input[name="log_day"]').value).padStart(2, '0');
+            window.location.href = `index.php?date=${year}/${month}/${day}`;
         });
     }
 
-    // Initial setup on page load
+    // --- Initial setup on page load ---
     toggleTimeSection();
     updateRemoveButtons();
 });

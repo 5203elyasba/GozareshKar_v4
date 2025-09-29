@@ -8,7 +8,7 @@ if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
     exit;
 }
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
-    header("location: index.php"); // Redirect back if not a POST request
+    header("location: index.php");
     exit;
 }
 
@@ -17,8 +17,12 @@ $user_id = $_SESSION['id'];
 // --- Data Sanitization & Retrieval ---
 $log_date_jalali = $_POST['log_date_jalali'] ?? '';
 $day_type = $_POST['day_type'] ?? 'work';
-$start_times = $_POST['start_time'] ?? [];
-$end_times = $_POST['end_time'] ?? [];
+
+// Retrieve time components from dropdowns
+$start_hours = $_POST['start_hour'] ?? [];
+$start_minutes = $_POST['start_minute'] ?? [];
+$end_hours = $_POST['end_hour'] ?? [];
+$end_minutes = $_POST['end_minute'] ?? [];
 
 // --- Validation ---
 if (empty($log_date_jalali)) {
@@ -26,7 +30,6 @@ if (empty($log_date_jalali)) {
     exit;
 }
 
-// Convert Jalali to Gregorian for DB operations
 $gregorian_date_obj = JalaliDate::fromJalaliToDateTime($log_date_jalali);
 if (!$gregorian_date_obj) {
     header("location: index.php?error=فرمت تاریخ نامعتبر است.");
@@ -38,16 +41,12 @@ list($jalali_year, $jalali_month, $jalali_day) = explode('/', $log_date_jalali);
 try {
     $pdo->beginTransaction();
 
-    // 1. Delete all existing records for this day and user to ensure a clean slate
-    $sql_delete_logs = "DELETE FROM time_logs WHERE user_id = :user_id AND log_date = :log_date";
-    $stmt_delete_logs = $pdo->prepare($sql_delete_logs);
-    $stmt_delete_logs->execute([':user_id' => $user_id, ':log_date' => $log_date_gregorian]);
+    // 1. Delete all existing records for this day and user
+    $pdo->prepare("DELETE FROM time_logs WHERE user_id = :user_id AND log_date = :log_date")->execute([':user_id' => $user_id, ':log_date' => $log_date_gregorian]);
+    $pdo->prepare("DELETE FROM day_properties WHERE user_id = :user_id AND log_date = :log_date")->execute([':user_id' => $user_id, ':log_date' => $log_date_gregorian]);
 
-    $sql_delete_props = "DELETE FROM day_properties WHERE user_id = :user_id AND log_date = :log_date";
-    $stmt_delete_props = $pdo->prepare($sql_delete_props);
-    $stmt_delete_props->execute([':user_id' => $user_id, ':log_date' => $log_date_gregorian]);
-
-    // 2. Insert the new day property record for all submission types
+    // 2. Insert the new day property record
+    // Note: For 'official_holiday_work', we store it as such, the reporting logic will handle the credit.
     $sql_prop = "INSERT INTO day_properties (user_id, log_date, day_type, status) VALUES (:user_id, :log_date, :day_type, 'approved')";
     $stmt_prop = $pdo->prepare($sql_prop);
     $stmt_prop->execute([
@@ -56,35 +55,43 @@ try {
         ':day_type' => $day_type
     ]);
 
-    // 3. If it's a working day ('work' or 'friday_work'), insert the time intervals
-    if ($day_type === 'work' || $day_type === 'friday_work') {
+    // 3. If it's a day with work logs, combine times and insert
+    $work_day_types = ['work', 'friday_work', 'official_holiday_work'];
+    if (in_array($day_type, $work_day_types)) {
         $sql_log = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day) VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
         $stmt_log = $pdo->prepare($sql_log);
 
-        for ($i = 0; $i < count($start_times); $i++) {
-            // Only insert if both start and end times are provided and valid
-            if (!empty($start_times[$i]) && !empty($end_times[$i]) && preg_match("/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/", $start_times[$i]) && preg_match("/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/", $end_times[$i])) {
-                $stmt_log->execute([
-                    ':user_id' => $user_id,
-                    ':log_date' => $log_date_gregorian,
-                    ':start_time' => $start_times[$i],
-                    ':end_time' => $end_times[$i],
-                    ':jalali_year' => $jalali_year,
-                    ':jalali_month' => $jalali_month,
-                    ':jalali_day' => $jalali_day
-                ]);
+        for ($i = 0; $i < count($start_hours); $i++) {
+            // Combine hour and minute, only if both are selected
+            if (isset($start_hours[$i], $start_minutes[$i], $end_hours[$i], $end_minutes[$i]) &&
+                $start_hours[$i] !== '' && $start_minutes[$i] !== '' &&
+                $end_hours[$i] !== '' && $end_minutes[$i] !== '') {
+
+                $start_time = "{$start_hours[$i]}:{$start_minutes[$i]}";
+                $end_time = "{$end_hours[$i]}:{$end_minutes[$i]}";
+
+                // Basic validation for time format
+                if (strtotime($end_time) > strtotime($start_time)) {
+                     $stmt_log->execute([
+                        ':user_id' => $user_id,
+                        ':log_date' => $log_date_gregorian,
+                        ':start_time' => $start_time,
+                        ':end_time' => $end_time,
+                        ':jalali_year' => $jalali_year,
+                        ':jalali_month' => $jalali_month,
+                        ':jalali_day' => $jalali_day
+                    ]);
+                }
             }
         }
     }
 
     $pdo->commit();
-    // Redirect back to the log page with a success message
     header("location: index.php?date=" . urlencode($log_date_jalali) . "&success=گزارش با موفقیت ثبت شد.");
 
 } catch (Exception $e) {
     $pdo->rollBack();
     error_log('Log Submission Error: ' . $e->getMessage());
-    // Redirect back with a generic error message
     header("location: index.php?date=" . urlencode($log_date_jalali) . "&error=خطای دیتابیس رخ داد. لطفا دوباره تلاش کنید.");
 }
 ?>
