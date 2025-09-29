@@ -56,7 +56,6 @@ try {
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">مدیریت کاربران</h4>
                 <div>
-                    <a href="holiday_requests.php" class="btn btn-warning">درخواست‌های تعطیلات</a>
                     <a href="reports.php" class="btn btn-secondary">مشاهده گزارشات کلی</a>
                     <a href="#add-user-form" class="btn btn-primary">افزودن کاربر جدید</a>
                 </div>
