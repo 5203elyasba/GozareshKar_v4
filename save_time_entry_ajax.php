@@ -23,13 +23,12 @@ if (!$data) {
 // --- Data Sanitization & Validation ---
 $log_id = isset($data['log_id']) && !empty($data['log_id']) ? (int)$data['log_id'] : null;
 $log_date_jalali = $data['log_date_jalali'] ?? null;
-$start_time = $data['start_time'] ?? null;
-$end_time = $data['end_time'] ?? null;
+$time = $data['time'] ?? null;
+$type = $data['type'] ?? null; // 'start' or 'end'
 $user_id = $_SESSION['id'];
 
-// A full time entry is required
-if (!$log_date_jalali || !$start_time || !$end_time) {
-    echo json_encode(['success' => false, 'message' => 'Missing required fields. Both start and end times are required.']);
+if (!$log_date_jalali || !$time || !$type) {
+    echo json_encode(['success' => false, 'message' => 'Missing required fields.']);
     exit;
 }
 
@@ -48,16 +47,24 @@ try {
 
     if ($log_id) {
         // UPDATE existing record
-        $sql = "UPDATE time_logs SET start_time = :start_time, end_time = :end_time WHERE id = :id AND user_id = :user_id";
+        $column_to_update = ($type === 'start') ? 'start_time' : 'end_time';
+        $sql = "UPDATE time_logs SET $column_to_update = :time WHERE id = :id AND user_id = :user_id";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            ':start_time' => $start_time,
-            ':end_time' => $end_time,
-            ':id' => $log_id,
-            ':user_id' => $user_id
-        ]);
+        $stmt->execute([':time' => $time, ':id' => $log_id, ':user_id' => $user_id]);
     } else {
         // INSERT new record
+        // **Error-proof logic**: Create a complete record to satisfy NOT NULL constraints.
+        // The other time field will be updated in a subsequent request.
+        $start_time = ($type === 'start') ? $time : '00:00:00';
+        $end_time = ($type === 'end') ? $time : '00:00:00';
+
+        // To be even safer, if one time is set, set the other to the same time temporarily.
+        if ($type === 'start') {
+            $end_time = $time;
+        } else {
+            $start_time = $time;
+        }
+
         $sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day)
                 VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
         $stmt = $pdo->prepare($sql);
