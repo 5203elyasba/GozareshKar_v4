@@ -7,7 +7,7 @@ if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true || $_SESSION
     exit;
 }
 
-$user_id_to_delete = $_GET['id'] ?? null;
+$user_id_to_delete = $_POST['user_id'] ?? null;
 
 if (!$user_id_to_delete) {
     header("location: admin.php?error=no_id");

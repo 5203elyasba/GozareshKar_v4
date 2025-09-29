@@ -106,11 +106,24 @@ try {
     document.addEventListener('DOMContentLoaded', function() {
         const deleteButtons = document.querySelectorAll('.btn-delete-user');
         deleteButtons.forEach(button => {
-            button.addEventListener('click', function() {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
                 const userId = this.dataset.userid;
                 const username = this.dataset.username;
                 if (confirm(`آیا از حذف کاربر '${username}' مطمئن هستید؟ این عمل غیرقابل بازگشت است.`)) {
-                    window.location.href = 'delete_user.php?id=' + userId;
+                    // Create a form dynamically and submit it via POST
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = 'delete_user.php';
+
+                    const hiddenField = document.createElement('input');
+                    hiddenField.type = 'hidden';
+                    hiddenField.name = 'user_id';
+                    hiddenField.value = userId;
+
+                    form.appendChild(hiddenField);
+                    document.body.appendChild(form);
+                    form.submit();
                 }
             });
         });

@@ -22,13 +22,15 @@
                 <?php endif; ?>
             </ul>
             <ul class="navbar-nav">
-                <li class="nav-item">
-                    <a class="nav-link" href="profile.php">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <?php echo "پروفایل: " . htmlspecialchars($_SESSION["username"]); ?>
                     </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="logout.php">خروج</a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                        <li><a class="dropdown-item" href="profile.php">مشاهده پروفایل</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="logout.php">خروج</a></li>
+                    </ul>
                 </li>
             </ul>
         </div>

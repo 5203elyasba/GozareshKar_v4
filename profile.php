@@ -1,25 +1,80 @@
 <?php
 require_once 'config.php';
 
-// Authentication
+// --- Authentication ---
 if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
     header("location: login.php");
     exit;
 }
 
-// User data from session
+// --- Handle Password Change Submission ---
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['current_password'])) {
+    $current_password = $_POST['current_password'];
+    $new_password = $_POST['new_password'];
+    $confirm_new_password = $_POST['confirm_new_password'];
+    $user_id = $_SESSION['id'];
+    $errors = [];
+
+    // Validation
+    if (empty($current_password) || empty($new_password) || empty($confirm_new_password)) {
+        $errors[] = "تمام فیلدهای رمز عبور الزامی هستند.";
+    }
+    if ($new_password !== $confirm_new_password) {
+        $errors[] = "رمز عبور جدید و تکرار آن یکسان نیستند.";
+    }
+    if (strlen($new_password) < 6) {
+        $errors[] = "رمز عبور جدید باید حداقل 6 کاراکتر باشد.";
+    }
+
+    if (empty($errors)) {
+        try {
+            // Verify current password
+            $sql = "SELECT password FROM users WHERE id = :id";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute(['id' => $user_id]);
+            $user = $stmt->fetch();
+
+            if ($user && password_verify($current_password, $user['password'])) {
+                // Current password is correct, update to new password
+                $hashed_new_password = password_hash($new_password, PASSWORD_DEFAULT);
+                $update_sql = "UPDATE users SET password = :password WHERE id = :id";
+                $update_stmt = $pdo->prepare($update_sql);
+                $update_stmt->execute(['password' => $hashed_new_password, 'id' => $user_id]);
+
+                header("location: profile.php?success=password_changed");
+                exit();
+            } else {
+                $errors[] = "رمز عبور فعلی شما اشتباه است.";
+            }
+        } catch (PDOException $e) {
+            $errors[] = "خطای پایگاه داده: " . $e->getMessage();
+        }
+    }
+
+    // If there were errors, redirect back with them in the session
+    if (!empty($errors)) {
+        $_SESSION['form_errors'] = $errors;
+        header("location: profile.php");
+        exit();
+    }
+}
+
+// --- Fetch User Data for Display ---
 $user_id = $_SESSION["id"];
 $username = $_SESSION["username"];
-$full_name = $_SESSION["full_name"] ?? 'کاربر'; // Fallback
-$role = $_SESSION["role"];
-
-require_once 'ReportCalculator.php';
-
-$calculator = new ReportCalculator($pdo);
-$report_data = $calculator->calculateForUser($user_id, null, null);
+// Fetch full_name and role directly from DB to ensure it's up-to-date
+try {
+    $stmt = $pdo->prepare("SELECT full_name, role FROM users WHERE id = :id");
+    $stmt->execute(['id' => $user_id]);
+    $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
+    $full_name = $user_data['full_name'] ?? 'کاربر';
+    $role = $user_data['role'] ?? 'employee';
+} catch(PDOException $e) {
+    $full_name = 'کاربر';
+    $role = 'employee';
+}
 
 ?>
-
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
@@ -33,34 +88,6 @@ $report_data = $calculator->calculateForUser($user_id, null, null);
 <body>
     <div class="container my-5">
         <?php if(file_exists('nav.php')) { require_once 'nav.php'; } ?>
-
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">خلاصه گزارش عملکرد</h5>
-            </div>
-            <div class="card-body">
-                <?php if ($report_data['success']): ?>
-                    <div class="row text-center">
-                        <div class="col-md-4">
-                            <h6>کل ساعات کاری</h6>
-                            <p class="fs-4 fw-bold"><?php echo $report_data['total_work_hours']; ?></p>
-                        </div>
-                        <div class="col-md-4">
-                            <h6>وضعیت اضافه/کسر کار (ساعت)</h6>
-                            <p class="fs-4 fw-bold <?php echo ($report_data['total_overtime_undertim_hours'] >= 0) ? 'text-success' : 'text-danger'; ?>">
-                                <?php echo $report_data['total_overtime_undertim_hours']; ?>
-                            </p>
-                        </div>
-                        <div class="col-md-4">
-                            <h6>مرخصی باقی‌مانده (روز)</h6>
-                            <p class="fs-4 fw-bold"><?php echo $report_data['remaining_leave_days']; ?></p>
-                        </div>
-                    </div>
-                <?php else: ?>
-                    <div class="alert alert-warning"><?php echo htmlspecialchars($report_data['error']); ?></div>
-                <?php endif; ?>
-            </div>
-        </div>
 
         <?php
         // Display success/error messages
@@ -82,16 +109,16 @@ $report_data = $calculator->calculateForUser($user_id, null, null);
             <div class="card-body">
                 <p><strong>نام کامل:</strong> <?php echo htmlspecialchars($full_name); ?></p>
                 <p><strong>نام کاربری:</strong> <?php echo htmlspecialchars($username); ?></p>
-                <p><strong>نقش:</strong> <?php echo htmlspecialchars($role); ?></p>
+                <p><strong>نقش:</strong> <?php echo ($role === 'admin') ? 'مدیر' : 'کارمند'; ?></p>
             </div>
         </div>
 
-        <div class="card mt-5">
+        <div class="card mt-4">
             <div class="card-header">
                 <h5 class="mb-0">تغییر رمز عبور</h5>
             </div>
             <div class="card-body">
-                <form action="change_password.php" method="post">
+                <form action="profile.php" method="post">
                     <div class="mb-3">
                         <label for="current_password" class="form-label">رمز عبور فعلی</label>
                         <input type="password" name="current_password" id="current_password" class="form-control" required>
