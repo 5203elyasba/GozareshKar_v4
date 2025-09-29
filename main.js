@@ -37,24 +37,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function createTimeRowHTML() {
         const hourOptions = generateSelectOptions(24);
-        const minuteOptions = generateSelectOptions(60); // 0-59, step 1
+        const minuteOptions = generateSelectOptions(60, 1); // 0-59, step 1
         return `
             <div class="col-12 col-md-5">
                 <label class="form-label small d-md-none">ورود</label>
                 <div class="input-group">
-                    <span class="input-group-text">ساعت</span>
-                    <select name="start_hour" class="form-select time-select" data-type="start" data-log-id="">${hourOptions}</select>
+                    <select name="start_hour" class="form-select time-select" data-type="start">${hourOptions}</select>
                     <span class="input-group-text">:</span>
-                    <select name="start_minute" class="form-select time-select" data-type="start" data-log-id="">${minuteOptions}</select>
+                    <select name="start_minute" class="form-select time-select" data-type="start">${minuteOptions}</select>
                 </div>
             </div>
             <div class="col-12 col-md-5">
                 <label class="form-label small d-md-none">خروج</label>
                 <div class="input-group">
-                    <span class="input-group-text">ساعت</span>
-                    <select name="end_hour" class="form-select time-select" data-type="end" data-log-id="">${hourOptions}</select>
+                    <select name="end_hour" class="form-select time-select" data-type="end">${hourOptions}</select>
                     <span class="input-group-text">:</span>
-                    <select name="end_minute" class="form-select time-select" data-type="end" data-log-id="">${minuteOptions}</select>
+                    <select name="end_minute" class="form-select time-select" data-type="end">${minuteOptions}</select>
                 </div>
             </div>
             <div class="col-12 col-md-2 d-flex justify-content-end align-items-center">
@@ -91,11 +89,22 @@ document.addEventListener('DOMContentLoaded', function() {
         const row = e.target.closest('.time-interval-row');
         const statusIcon = row.querySelector('.status-icon');
 
-        const hourSelect = row.querySelector(`select[name="${e.target.dataset.type}_hour"]`);
-        const minuteSelect = row.querySelector(`select[name="${e.target.dataset.type}_minute"]`);
+        const startHour = row.querySelector('select[name="start_hour"]').value;
+        const startMinute = row.querySelector('select[name="start_minute"]').value;
+        const endHour = row.querySelector('select[name="end_hour"]').value;
+        const endMinute = row.querySelector('select[name="end_minute"]').value;
 
-        if (hourSelect.value && minuteSelect.value) {
-            const timeToSave = `${hourSelect.value}:${minuteSelect.value}`;
+        // **CRITICAL CHANGE**: Only trigger save when BOTH start and end times are fully selected.
+        if (startHour && startMinute && endHour && endMinute) {
+            const startTime = `${startHour}:${startMinute}`;
+            const endTime = `${endHour}:${endMinute}`;
+
+            // Basic validation
+            if (new Date(`1970/01/01 ${endTime}`) <= new Date(`1970/01/01 ${startTime}`)) {
+                setStatus(statusIcon, 'error', 'ساعت خروج باید بعد از ساعت ورود باشد.');
+                return;
+            }
+
             setStatus(statusIcon, 'saving');
             fetch('save_time_entry_ajax.php', {
                 method: 'POST',
@@ -103,8 +112,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({
                     log_id: row.dataset.logId,
                     log_date_jalali: JALALI_DATE,
-                    time: timeToSave,
-                    type: e.target.dataset.type
+                    start_time: startTime,
+                    end_time: endTime
                 })
             })
             .then(res => res.json())
@@ -113,7 +122,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     setStatus(statusIcon, 'success');
                     if (data.log_id && !row.dataset.logId) {
                         row.dataset.logId = data.log_id;
-                        row.querySelectorAll('.time-select').forEach(sel => sel.dataset.logId = data.log_id);
                     }
                 } else {
                     setStatus(statusIcon, 'error', data.message);
@@ -135,8 +143,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 setStatus(dayTypeStatus, 'success');
                 toggleTimeSection();
-                // Reload to reflect changes server-side, especially clearing time logs
-                window.location.reload();
+                window.location.reload(); // Reload to get fresh state from server
             } else {
                 setStatus(dayTypeStatus, 'error', data.message);
             }
@@ -146,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     addIntervalBtn.addEventListener('click', function() {
         const newRow = document.createElement('div');
-        newRow.className = 'row g-3 mb-2 align-items-center time-interval-row';
+        newRow.className = 'row g-2 mb-3 align-items-center time-interval-row';
         newRow.dataset.logId = '';
         newRow.innerHTML = createTimeRowHTML();
         timeContainer.appendChild(newRow);

@@ -57,13 +57,19 @@ list($log_date_year, $log_date_month, $log_date_day) = explode('/', $log_date_ja
 function generate_time_dropdowns($prefix, $log_id, $selectedValue = '') {
     $hour = ''; $minute = '';
     if ($selectedValue && strpos($selectedValue, ':') !== false) { list($hour, $minute) = explode(':', $selectedValue); }
-    $hour_html = "<select name='{$prefix}_hour' class='form-select time-select' data-type='{$prefix}' data-log-id='{$log_id}'><option value=''>-</option>";
+
+    // Hour dropdown
+    $hour_html = "<select name='{$prefix}_hour' class='form-select time-select' data-type='{$prefix}' data-log-id='{$log_id}'><option value=''>ساعت</option>";
     for ($h = 0; $h <= 23; $h++) { $h_padded = str_pad($h, 2, '0', STR_PAD_LEFT); $selected = ($h_padded === $hour) ? 'selected' : ''; $hour_html .= "<option value='{$h_padded}' {$selected}>{$h_padded}</option>"; }
     $hour_html .= "</select>";
-    $minute_html = "<select name='{$prefix}_minute' class='form-select time-select' data-type='{$prefix}' data-log-id='{$log_id}'><option value=''>-</option>";
+
+    // Minute dropdown (00-59, 1 by 1)
+    $minute_html = "<select name='{$prefix}_minute' class='form-select time-select' data-type='{$prefix}' data-log-id='{$log_id}'><option value=''>دقیقه</option>";
     for ($m = 0; $m <= 59; $m++) { $m_padded = str_pad($m, 2, '0', STR_PAD_LEFT); $selected = ($m_padded === $minute) ? 'selected' : ''; $minute_html .= "<option value='{$m_padded}' {$selected}>{$m_padded}</option>"; }
     $minute_html .= "</select>";
-    return "<div class='input-group'><span class='input-group-text'>دقیقه</span>{$minute_html}<span class='input-group-text'>ساعت</span>{$hour_html}</div>";
+
+    // Combine with separator
+    return "<div class='input-group'>{$hour_html}<span class='input-group-text'>:</span>{$minute_html}</div>";
 }
 ?>
 <!DOCTYPE html>
@@ -110,7 +116,7 @@ function generate_time_dropdowns($prefix, $log_id, $selectedValue = '') {
                         <label class="form-label fw-bold">۳. انتخاب ساعات کاری</label>
                         <div id="time-intervals-container">
                             <?php foreach ($work_logs as $log): ?>
-                                <div class="row g-3 mb-2 align-items-center time-interval-row" data-log-id="<?php echo $log['id']; ?>">
+                                <div class="row g-2 mb-3 align-items-center time-interval-row" data-log-id="<?php echo $log['id']; ?>">
                                     <div class="col-12 col-md-5"><label class="form-label small d-md-none">ورود</label><?php echo generate_time_dropdowns('start', $log['id'], date('H:i', strtotime($log['start_time']))); ?></div>
                                     <div class="col-12 col-md-5"><label class="form-label small d-md-none">خروج</label><?php echo generate_time_dropdowns('end', $log['id'], date('H:i', strtotime($log['end_time']))); ?></div>
                                     <div class="col-12 col-md-2 d-flex justify-content-end align-items-center">

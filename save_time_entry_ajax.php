@@ -23,12 +23,13 @@ if (!$data) {
 // --- Data Sanitization & Validation ---
 $log_id = isset($data['log_id']) && !empty($data['log_id']) ? (int)$data['log_id'] : null;
 $log_date_jalali = $data['log_date_jalali'] ?? null;
-$time = $data['time'] ?? null;
-$type = $data['type'] ?? null; // 'start' or 'end'
+$start_time = $data['start_time'] ?? null;
+$end_time = $data['end_time'] ?? null;
 $user_id = $_SESSION['id'];
 
-if (!$log_date_jalali || !$time || !$type) {
-    echo json_encode(['success' => false, 'message' => 'Missing required fields.']);
+// A full time entry is required
+if (!$log_date_jalali || !$start_time || !$end_time) {
+    echo json_encode(['success' => false, 'message' => 'Missing required fields. Both start and end times are required.']);
     exit;
 }
 
@@ -47,15 +48,16 @@ try {
 
     if ($log_id) {
         // UPDATE existing record
-        $column_to_update = ($type === 'start') ? 'start_time' : 'end_time';
-        $sql = "UPDATE time_logs SET $column_to_update = :time WHERE id = :id AND user_id = :user_id";
+        $sql = "UPDATE time_logs SET start_time = :start_time, end_time = :end_time WHERE id = :id AND user_id = :user_id";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([':time' => $time, ':id' => $log_id, ':user_id' => $user_id]);
+        $stmt->execute([
+            ':start_time' => $start_time,
+            ':end_time' => $end_time,
+            ':id' => $log_id,
+            ':user_id' => $user_id
+        ]);
     } else {
         // INSERT new record
-        $start_time = ($type === 'start') ? $time : null;
-        $end_time = ($type === 'end') ? $time : null;
-
         $sql = "INSERT INTO time_logs (user_id, log_date, start_time, end_time, log_type, jalali_year, jalali_month, jalali_day)
                 VALUES (:user_id, :log_date, :start_time, :end_time, 'work', :jalali_year, :jalali_month, :jalali_day)";
         $stmt = $pdo->prepare($sql);
