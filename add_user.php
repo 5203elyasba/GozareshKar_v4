@@ -20,10 +20,20 @@ if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true || !isset($_S
         <h2 class="mb-4">افزودن کاربر جدید</h2>
         <div class="card">
             <div class="card-body">
+                <?php
+                if (isset($_SESSION['form_errors'])) {
+                    foreach ($_SESSION['form_errors'] as $error) {
+                        echo '<div class="alert alert-danger">' . htmlspecialchars($error) . '</div>';
+                    }
+                    unset($_SESSION['form_errors']);
+                }
+                $inputs = $_SESSION['form_inputs'] ?? [];
+                unset($_SESSION['form_inputs']);
+                ?>
                 <form action="handle_add_user.php" method="post">
                     <div class="mb-3">
                         <label for="username" class="form-label">نام کاربری</label>
-                        <input type="text" class="form-control" id="username" name="username" required>
+                        <input type="text" class="form-control" id="username" name="username" value="<?php echo htmlspecialchars($inputs['username'] ?? ''); ?>" required>
                     </div>
                     <div class="mb-3">
                         <label for="password" class="form-label">رمز عبور</label>
@@ -31,22 +41,22 @@ if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true || !isset($_S
                     </div>
                     <div class="mb-3">
                         <label for="full_name" class="form-label">نام کامل</label>
-                        <input type="text" class="form-control" id="full_name" name="full_name">
+                        <input type="text" class="form-control" id="full_name" name="full_name" value="<?php echo htmlspecialchars($inputs['full_name'] ?? ''); ?>">
                     </div>
                     <div class="mb-3">
                         <label for="role" class="form-label">نقش</label>
                         <select class="form-select" id="role" name="role">
-                            <option value="employee">کارمند (Employee)</option>
-                            <option value="admin">ادمین (Admin)</option>
+                            <option value="employee" <?php if(isset($inputs['role']) && $inputs['role'] == 'employee') echo 'selected'; ?>>کارمند (Employee)</option>
+                            <option value="admin" <?php if(isset($inputs['role']) && $inputs['role'] == 'admin') echo 'selected'; ?>>ادمین (Admin)</option>
                         </select>
                     </div>
                     <div class="mb-3">
                         <label for="daily_hours_goal" class="form-label">ساعات کاری موظفی (روزانه)</label>
-                        <input type="number" step="0.1" class="form-control" id="daily_hours_goal" name="daily_hours_goal" value="8" required>
+                        <input type="number" step="0.1" class="form-control" id="daily_hours_goal" name="daily_hours_goal" value="<?php echo htmlspecialchars($inputs['daily_hours_goal'] ?? 8); ?>" required>
                     </div>
                     <div class="mb-3">
                         <label for="annual_leave_days" class="form-label">مرخصی سالانه (روز)</label>
-                        <input type="number" class="form-control" id="annual_leave_days" name="annual_leave_days" value="26" required>
+                        <input type="number" class="form-control" id="annual_leave_days" name="annual_leave_days" value="<?php echo htmlspecialchars($inputs['annual_leave_days'] ?? 26); ?>" required>
                     </div>
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                          <a href="admin.php" class="btn btn-secondary">انصراف</a>

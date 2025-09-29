@@ -57,7 +57,7 @@ try {
                 <h4 class="mb-0">مدیریت کاربران</h4>
                 <div>
                     <a href="reports.php" class="btn btn-secondary">مشاهده گزارشات کلی</a>
-                    <a href="#add-user-form" class="btn btn-primary">افزودن کاربر جدید</a>
+                    <a href="add_user.php" class="btn btn-primary">افزودن کاربر جدید</a>
                 </div>
             </div>
             <div class="card-body">
@@ -97,50 +97,6 @@ try {
                         </tbody>
                     </table>
                 </div>
-            </div>
-        </div>
-
-        <div class="card mt-5" id="add-user-form">
-            <div class="card-header">
-                <h5 class="mb-0">افزودن کاربر جدید</h5>
-            </div>
-            <div class="card-body">
-                <form action="create_user.php" method="post">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="full_name" class="form-label">نام کامل</label>
-                            <input type="text" class="form-control" name="full_name" id="full_name" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="username" class="form-label">نام کاربری (انگلیسی)</label>
-                            <input type="text" class="form-control" name="username" id="username" required>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="password" class="form-label">رمز عبور</label>
-                            <input type="password" class="form-control" name="password" id="password" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="role" class="form-label">نقش</label>
-                            <select class="form-select" name="role" id="role" required>
-                                <option value="employee" selected>کارمند (Employee)</option>
-                                <option value="admin">مدیر (Admin)</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="daily_hours_goal" class="form-label">ساعات کاری روزانه</label>
-                            <input type="number" step="0.1" class="form-control" name="daily_hours_goal" id="daily_hours_goal" value="8" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="annual_leave_days" class="form-label">مرخصی سالانه (روز)</label>
-                            <input type="number" class="form-control" name="annual_leave_days" id="annual_leave_days" value="26" required>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-success">ذخیره کاربر</button>
-                </form>
             </div>
         </div>
     </div>

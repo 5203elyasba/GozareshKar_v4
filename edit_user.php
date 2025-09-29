@@ -34,48 +34,6 @@ try {
 }
 
 
-// Handle form submission
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['full_name'])) { // Check for main form submission
-    $full_name = trim($_POST['full_name']);
-    $username = trim($_POST['username']);
-    $role = $_POST['role'];
-    $daily_hours_goal = filter_input(INPUT_POST, 'daily_hours_goal', FILTER_VALIDATE_FLOAT);
-    $annual_leave_days = filter_input(INPUT_POST, 'annual_leave_days', FILTER_VALIDATE_INT);
-
-    $error = '';
-    // Basic validation
-    if (empty($full_name) || empty($username) || ($role !== 'admin' && $role !== 'employee') || $daily_hours_goal === false || $annual_leave_days === false) {
-        $error = "لطفا تمام فیلدها را به درستی پر کنید.";
-    }
-    // Check for username uniqueness if it has changed
-    if (empty($error) && $username !== $user['username']) {
-        $sql = "SELECT id FROM users WHERE username = :username";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute(['username' => $username]);
-        if ($stmt->rowCount() > 0) {
-            $error = "این نام کاربری قبلا ثبت شده است.";
-        }
-    }
-
-    if (empty($error)) {
-        try {
-            $sql = "UPDATE users SET username = :username, full_name = :full_name, role = :role, daily_hours_goal = :daily_hours_goal, annual_leave_days = :annual_leave_days WHERE id = :id";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                'username' => $username,
-                'full_name' => $full_name,
-                'role' => $role,
-                'daily_hours_goal' => $daily_hours_goal,
-                'annual_leave_days' => $annual_leave_days,
-                'id' => $user_id
-            ]);
-            header("location: admin.php?success=user_updated");
-            exit;
-        } catch (PDOException $e) {
-            $error = "خطای پایگاه داده: " . $e->getMessage();
-        }
-    }
-}
 ?>
 
 <!DOCTYPE html>
@@ -96,10 +54,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['full_name'])) { // Che
                 <h4 class="mb-0">ویرایش کاربر</h4>
             </div>
             <div class="card-body">
-                <?php if (!empty($error)): ?>
-                    <div class="alert alert-danger"><?php echo $error; ?></div>
-                <?php endif; ?>
-                <form action="edit_user.php?id=<?php echo $user_id; ?>" method="post">
+                <?php
+                if (isset($_SESSION['form_errors'])) {
+                    foreach ($_SESSION['form_errors'] as $error) {
+                        echo '<div class="alert alert-danger">' . htmlspecialchars($error) . '</div>';
+                    }
+                    unset($_SESSION['form_errors']);
+                }
+                ?>
+                <form action="handle_edit_user.php" method="post">
+                    <input type="hidden" name="user_id" value="<?php echo $user_id; ?>">
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="full_name" class="form-label">نام کامل</label>
