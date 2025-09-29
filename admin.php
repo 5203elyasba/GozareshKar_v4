@@ -86,8 +86,11 @@ try {
                                         <td><?php echo ($user['role'] === 'admin') ? 'مدیر' : 'کارمند'; ?></td>
                                         <td><?php echo JalaliDate::toJalali($user['created_at']); ?></td>
                                         <td>
+                                            <a href="my_reports.php?user_id=<?php echo $user['id']; ?>" class="btn btn-success btn-sm">گزارش</a>
                                             <a href="edit_user.php?id=<?php echo $user['id']; ?>" class="btn btn-info btn-sm">ویرایش</a>
+                                            <?php if ($_SESSION['id'] != $user['id']): ?>
                                             <button type="button" class="btn btn-danger btn-sm btn-delete-user" data-userid="<?php echo $user['id']; ?>" data-username="<?php echo htmlspecialchars($user['username']); ?>">حذف</button>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

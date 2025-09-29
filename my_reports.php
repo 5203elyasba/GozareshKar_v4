@@ -9,6 +9,23 @@ if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
 }
 
 $user_id = $_SESSION['id'];
+$report_user_id = $user_id; // Default to the logged-in user
+$report_user_info = ['username' => $_SESSION['username'], 'full_name' => 'شما']; // Default info
+
+// If the logged-in user is an admin AND a specific user_id is requested, view that user's report
+if ($_SESSION['role'] === 'admin' && isset($_GET['user_id']) && filter_var($_GET['user_id'], FILTER_VALIDATE_INT)) {
+    $requested_user_id = (int)$_GET['user_id'];
+
+    // Fetch the requested user's info to display their name
+    $user_info_stmt = $pdo->prepare("SELECT username, full_name FROM users WHERE id = ?");
+    $user_info_stmt->execute([$requested_user_id]);
+    $user_info = $user_info_stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($user_info) {
+        $report_user_id = $requested_user_id;
+        $report_user_info = $user_info;
+    }
+}
 
 // --- Date Selection ---
 $current_jalali_date = JalaliDate::toJalali(date('Y-m-d'));
@@ -33,7 +50,7 @@ try {
     // 1. Fetch user's settings (daily goal, annual leave)
     $user_sql = "SELECT daily_hours_goal, annual_leave_days FROM users WHERE id = :id";
     $user_stmt = $pdo->prepare($user_sql);
-    $user_stmt->execute(['id' => $user_id]);
+    $user_stmt->execute(['id' => $report_user_id]);
     $user_data = $user_stmt->fetch(PDO::FETCH_ASSOC);
     $daily_goal = $user_data['daily_hours_goal'] ?? 8;
     $annual_leave_days = $user_data['annual_leave_days'] ?? 26;
@@ -47,7 +64,7 @@ try {
     $properties_by_date = [];
     $prop_sql = "SELECT log_date, day_type FROM day_properties WHERE user_id = :user_id AND log_date BETWEEN :start_date AND :end_date";
     $prop_stmt = $pdo->prepare($prop_sql);
-    $prop_stmt->execute([':user_id' => $user_id, ':start_date' => $first_day_gregorian_str, ':end_date' => $last_day_gregorian_str]);
+    $prop_stmt->execute([':user_id' => $report_user_id, ':start_date' => $first_day_gregorian_str, ':end_date' => $last_day_gregorian_str]);
     while ($row = $prop_stmt->fetch(PDO::FETCH_ASSOC)) {
         $properties_by_date[$row['log_date']] = $row['day_type'];
     }
@@ -56,7 +73,7 @@ try {
     $leave_by_date = [];
     $leave_sql = "SELECT leave_date FROM leave_logs WHERE user_id = :user_id AND leave_date BETWEEN :start_date AND :end_date";
     $leave_stmt = $pdo->prepare($leave_sql);
-    $leave_stmt->execute([':user_id' => $user_id, ':start_date' => $first_day_gregorian_str, ':end_date' => $last_day_gregorian_str]);
+    $leave_stmt->execute([':user_id' => $report_user_id, ':start_date' => $first_day_gregorian_str, ':end_date' => $last_day_gregorian_str]);
     while ($row = $leave_stmt->fetch(PDO::FETCH_ASSOC)) {
         $leave_by_date[$row['leave_date']] = true;
     }
@@ -65,7 +82,7 @@ try {
     $time_logs_by_date = [];
     $log_sql = "SELECT log_date, start_time, end_time FROM time_logs WHERE user_id = :user_id AND log_date BETWEEN :start_date AND :end_date ORDER BY start_time ASC";
     $log_stmt = $pdo->prepare($log_sql);
-    $log_stmt->execute([':user_id' => $user_id, ':start_date' => $first_day_gregorian_str, ':end_date' => $last_day_gregorian_str]);
+    $log_stmt->execute([':user_id' => $report_user_id, ':start_date' => $first_day_gregorian_str, ':end_date' => $last_day_gregorian_str]);
     while ($row = $log_stmt->fetch(PDO::FETCH_ASSOC)) {
         if (!isset($time_logs_by_date[$row['log_date']])) $time_logs_by_date[$row['log_date']] = [];
         $time_logs_by_date[$row['log_date']][] = $row;
@@ -126,7 +143,7 @@ try {
 
     // 4. Calculate final summary values
     $total_leave_stmt = $pdo->prepare("SELECT COUNT(*) FROM leave_logs WHERE user_id = :user_id");
-    $total_leave_stmt->execute(['user_id' => $user_id]);
+    $total_leave_stmt->execute([':user_id' => $report_user_id]);
     $summary['remaining_leave_days'] = $annual_leave_days - $total_leave_stmt->fetchColumn();
 
     $summary['required_work_hours'] = $workdays_in_month * $daily_goal;
@@ -151,7 +168,7 @@ foreach ($logs_by_day as $day => $data) {
 $available_years = [];
 try {
     $years_stmt = $pdo->prepare("SELECT DISTINCT jalali_year FROM time_logs WHERE user_id = :user_id AND jalali_year IS NOT NULL ORDER BY jalali_year DESC");
-    $years_stmt->execute(['user_id' => $user_id]);
+    $years_stmt->execute([':user_id' => $report_user_id]);
     $available_years = $years_stmt->fetchAll(PDO::FETCH_COLUMN);
 } catch (Exception $e) {}
 
@@ -172,9 +189,16 @@ $jalali_months = ["فروردین","اردیبهشت","خرداد","تیر","م�
     <div class="container my-5">
         <?php if(file_exists('nav.php')) { require_once 'nav.php'; } ?>
 
-        <h3 class="mb-4">گزارش ماهانه شما</h3>
+        <h3 class="mb-4">
+            گزارش ماهانه:
+            <span class="text-primary"><?php echo htmlspecialchars($report_user_info['full_name']); ?></span>
+            <?php if ($_SESSION['role'] === 'admin' && $user_id != $report_user_id) echo " (مشاهده توسط ادمین)"; ?>
+        </h3>
 
         <form action="my_reports.php" method="get" class="row g-3 mb-4 p-3 border rounded bg-light">
+            <?php if ($_SESSION['role'] === 'admin'): ?>
+                <input type="hidden" name="user_id" value="<?php echo $report_user_id; ?>">
+            <?php endif; ?>
             <div class="col-md-5">
                 <label for="year" class="form-label">سال</label>
                 <select name="year" id="year" class="form-select">
